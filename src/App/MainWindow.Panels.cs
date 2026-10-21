@@ -191,6 +191,8 @@ namespace MicroScribe.App
             // options
             var opt = new StackPanel();
             opt.Children.Add(Ui.Header("OPTIONS"));
+            if (f.Origin == FeatureOrigin.Constructed && f.Construction == "offset")
+                opt.Children.Add(Ui.Row(Lbl("Offset"), Ui.LenBox(f.ConstructValue, v => { f.ConstructValue = v; Changed(); }), Ui.UnitLabel()));
             if (f.Origin == FeatureOrigin.Measured)
             {
                 // inside/outside only means something for closed shapes and for curves traced against a wall
@@ -572,6 +574,20 @@ namespace MicroScribe.App
             w.Children.Add(Ui.Btn("Axis of A", () => Construct("axis", _relA)));
             w.Children.Add(Ui.Btn("Centre of A", () => Construct("center", _relA)));
             cons.Children.Add(w);
+            cons.Children.Add(Ui.Header("PLANES AND MORE (B = a plane)"));
+            var w2 = new WrapPanel();
+            w2.Children.Add(Ui.Btn("Mid-plane of A, B", () => Construct("midplane", _relA, _relB), "Symmetry plane between two faces; shows the width between them"));
+            w2.Children.Add(Ui.Btn("Project A onto B", () => Construct("project", _relA, _relB), "Point, centre or axis projected onto plane B"));
+            w2.Children.Add(Ui.Btn("Plane through A ∥ B", () => Construct("parallel", _relA, _relB), "Plane parallel to B through A's centre"));
+            w2.Children.Add(Ui.Btn("Plane through axis A ⟂ B", () => Construct("perpendicular", _relA, _relB), "Plane containing line/axis A, perpendicular to plane B"));
+            w2.Children.Add(Ui.Btn("Mirror A in B", () => Construct("mirror", _relA, _relB), "Mirror image of A about plane B"));
+            cons.Children.Add(w2);
+            var offs = Ui.Row(Ui.Btn("Offset plane A by", () => Construct("offset", _relA)), Ui.LenBox(_consValue, v => _consValue = v, 70), Ui.UnitLabel());
+            cons.Children.Add(offs);
+            var w3 = new WrapPanel();
+            w3.Children.Add(Ui.Btn("Bolt circle through selected", () => ConstructFromSelection("boltcircle"), "Circle through the centres of 3+ features selected in the list (Ctrl+click)"));
+            w3.Children.Add(Ui.Btn("Plane through selected centres", () => ConstructFromSelection("centreplane"), "Plane through the centres of 3+ selected features"));
+            cons.Children.Add(w3);
             cons.Children.Add(Ui.Row(Lbl("Plane C (corner)"), FeatureCombo(_relC, id => { _relC = id; }, x => x.Kind == FeatureKind.Plane)));
             cons.Children.Add(Ui.Btn("Corner of planes A, B, C", () => Construct("intersect", _relA, _relB, _relC)));
             p.Children.Add(Ui.Card(cons));
@@ -586,15 +602,46 @@ namespace MicroScribe.App
             RebuildDims();
         }
 
+        double _consValue = 10;
+
+        void ConstructFromSelection(string op)
+        {
+            var sel = SelectedFeatures().Where(x => x.Geometry != null && !(x.Geometry is CurvePrim) && !(x.Geometry is SurfacePrim) && !(x.Geometry is CloudPrim)).ToList();
+            if (sel.Count < 3) { Status("Select 3 or more holes / centres in the feature list first (Ctrl+click)"); return; }
+            Construct(op, sel.Select(x => x.Id).ToArray());
+        }
+
+        static string ConstructionName(string op)
+        {
+            switch (op)
+            {
+                case "axis": return "Axis";
+                case "line2": return "Line";
+                case "intersect": return "Intersection";
+                case "center": return "Centre";
+                case "offset": return "Offset plane";
+                case "midplane": return "Mid-plane";
+                case "project": return "Projection";
+                case "parallel": return "Parallel plane";
+                case "perpendicular": return "Perpendicular plane";
+                case "mirror": return "Mirror";
+                case "boltcircle": return "Bolt circle";
+                case "centreplane": return "Centre plane";
+            }
+            return "Midpoint";
+        }
+
         void Construct(string op, params int[] ids)
         {
             var src = ids.Where(i => i != 0).Select(i => _proj.Find(i)).ToList();
-            int need = op == "axis" || op == "center" ? 1 : ids.Length;
+            bool multi = op == "boltcircle" || op == "centreplane";
+            int need = op == "axis" || op == "center" || op == "offset" ? 1 : multi ? 3 : ids.Length;
             if (src.Count < need || src.Any(x => x == null)) { Status("Select the source feature(s) first"); return; }
-            var f = _proj.NewFeature(FeatureKind.Point, op == "axis" ? "Axis" : op == "line2" ? "Line" : op == "intersect" ? "Intersection" : op == "center" ? "Centre" : "Midpoint");
+            var f = _proj.NewFeature(FeatureKind.Point, ConstructionName(op));
             f.Origin = FeatureOrigin.Constructed;
             f.Construction = op;
-            f.SourceIds.AddRange(src.Take(need).Select(x => x.Id));
+            if (op == "offset") f.ConstructValue = _consValue;
+            f.SourceIds.AddRange((multi ? src : src.Take(need)).Select(x => x.Id));
             FeatureSolver.Solve(_proj, f);
             if (f.Geometry == null)
             {

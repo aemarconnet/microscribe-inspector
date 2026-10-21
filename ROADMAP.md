@@ -50,7 +50,7 @@ Effort: **S** small · **M** medium · **L** large.
     ellipse, with ball compensation. Fillets along straight edges measure as (partial) cylinders;
     sheet-metal vector points are comparison points against the nominal model (item 8); width and
     keyways come with the mid-plane construction (item 14).
-14. [ ] **More constructions** (S–M) — offset plane, mid-plane, projection onto a plane, plane
+14. [x] **More constructions** (S–M) — offset plane, mid-plane, projection onto a plane, plane
     through a line parallel/perpendicular to a datum, circle or plane through hole centres (bolt
     circle), mirror.
 15. [ ] **Constrained fits** (M) — fixed diameter or cone angle, forced parallel/perpendicular to a

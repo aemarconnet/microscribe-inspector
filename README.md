@@ -35,6 +35,7 @@ written from **public protocol documentation** and **observation of the device i
 | GD&T | Flatness, straightness, roundness, cylindricity (least squares or minimum zone), parallelism, perpendicularity, angularity, position and coaxiality, by clicking the feature and its datum. |
 | Nominal model | Load an STL of the part, align to it with point pairs and a best fit, see the stylus' live distance from the model, colour probed points by deviation, and check the profile of any feature against it. |
 | Planes | Resize by dragging handles or typing a size; extend or trim to another plane so faces meet for knitting. |
+| Constructions | Intersections, midpoints, axes, centres, corners; offset plane, mid-plane (with the width between two faces), projection onto a plane, plane through a feature parallel or perpendicular to a datum, mirror, bolt circle and plane through hole centres. |
 | Alignment | 3-2-1 from features or principal axes, 90° turns, origin at a feature or at any bounding-box corner, face centre or centre (clickable handles). |
 | View | Work area: sketch the usable table area and a height once, and *Fit* always frames it. 3Dconnexion SpaceMouse navigation. mm / inch toggle. |
 | Export | STEP AP214 (analytic and B-spline surfaces plus axes, centres, curves), CSV, XYZ point cloud. Projects are plain XML (`.msproj`). |

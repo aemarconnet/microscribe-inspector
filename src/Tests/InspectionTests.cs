@@ -19,6 +19,54 @@ namespace MicroScribe.Tests
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("nominal model: STL, distances, pairs, best fit, profile", TestModel));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("HTML report and results log", TestReport));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("inspection plan runs and SPC", TestPlanSpc));
+            Program.ExtraTests.Add(new KeyValuePair<string, Action>("constructions: offset, mid-plane, projection, mirror, bolt circle", TestConstructions));
+        }
+
+        static Feature Cons(Project p, string op, params Feature[] src)
+        {
+            var f = p.NewFeature(FeatureKind.Point);
+            f.Origin = FeatureOrigin.Constructed; f.Construction = op;
+            f.SourceIds.AddRange(src.Select(s => s.Id));
+            return f;
+        }
+
+        static void TestConstructions()
+        {
+            var p = new Project();
+            var bottom = Plane(p, 0); var top = Plane(p, 10.2);
+            var pt = Pts(p, FeatureKind.Point, new[] { new Vec3(3, 4, 7) });
+            var ln = Pts(p, FeatureKind.Line, Enumerable.Range(0, 5).Select(i => new Vec3(i * 10, 0, 7)));
+            var ball = Pts(p, FeatureKind.Sphere, Enumerable.Range(0, 12).Select(i =>
+            {
+                double t = i * 0.9, ph = 0.3 + 0.1 * i;
+                return new Vec3(5, 0, 3) + new Vec3(Math.Cos(t) * Math.Sin(ph), Math.Sin(t) * Math.Sin(ph), Math.Cos(ph)) * 8;
+            }), q => (new Vec3(5, 0, 3) - q).Normalized());
+            var holes = Enumerable.Range(0, 4).Select(i => Pts(p, FeatureKind.Point, new[] { new Vec3(10 + 25 * Math.Cos(i * Math.PI / 2 + 0.3), 10 + 25 * Math.Sin(i * Math.PI / 2 + 0.3), 0) })).ToArray();
+            var yz = Pts(p, FeatureKind.Plane, new[] { new Vec3(0, 0, 0), new Vec3(0, 10, 0), new Vec3(0, 10, 10), new Vec3(0, 0, 10), new Vec3(0, 5, 5) }, q => Vec3.UnitX);
+
+            var mid = Cons(p, "midplane", bottom, top);
+            var off = Cons(p, "offset", bottom); off.ConstructValue = 5;
+            var proj = Cons(p, "project", pt, bottom);
+            var par = Cons(p, "parallel", pt, bottom);
+            var perp = Cons(p, "perpendicular", ln, bottom);
+            var mir = Cons(p, "mirror", ball, yz);
+            var bolt = Cons(p, "boltcircle", holes);
+            FeatureSolver.SolveAll(p);
+
+            var mp = (PlanePrim)mid.Geometry;
+            Check(Math.Abs(Math.Abs(mp.Normal.Z) - 1) < 1e-9 && Math.Abs(mp.Origin.Z - 5.1) < 1e-9, "mid-plane at z = {0}", mp.Origin.Z);
+            Check(CadExport.Describe(mid.Geometry, mid, new UnitFmt(false)).First() == "Width     10.200 mm", "mid-plane width line");
+            Check(mid.Kind == FeatureKind.Plane && PlaneBounds.Corners(mid, mp).Max(c => c.X) > 39, "constructed plane is sized by its sources");
+            Check(Math.Abs(((PlanePrim)off.Geometry).SignedDistance(new Vec3(0, 0, 5))) < 1e-9, "offset plane");
+            Check((((PointPrim)proj.Geometry).Position - new Vec3(3, 4, 0)).Length < 1e-9, "projection");
+            Check(Math.Abs(((PlanePrim)par.Geometry).SignedDistance(new Vec3(100, -50, 7))) < 1e-9, "parallel plane through the point");
+            var pp = (PlanePrim)perp.Geometry;
+            Check(Math.Abs(Math.Abs(pp.Normal.Y) - 1) < 1e-9 && Math.Abs(pp.SignedDistance(new Vec3(33, 0, 7))) < 1e-9, "perpendicular plane through the line");
+            var ms = (SpherePrim)mir.Geometry;
+            Check((ms.Center - new Vec3(-5, 0, 3)).Length < 1e-6 && Math.Abs(ms.Radius - 8) < 1e-6 && mir.Kind == FeatureKind.Sphere, "mirrored sphere at {0}", ms.Center);
+            var bc = (CirclePrim)bolt.Geometry;
+            Check(Math.Abs(bc.Radius - 25) < 1e-6 && (bc.Center - new Vec3(10, 10, 0)).Length < 1e-6, "bolt circle R{0}", bc.Radius);
+            Check(CadExport.Describe(bolt.Geometry, bolt, new UnitFmt(false)).Last().StartsWith("4 centres, every 90°"), "bolt circle info");
         }
 
         static void TestPlanSpc()

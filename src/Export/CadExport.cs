@@ -320,6 +320,18 @@ namespace MicroScribe.Export
 
         public static IEnumerable<string> Describe(Primitive g, Feature f, UnitFmt u)
         {
+            var lines = DescribeCore(g, f, u).ToList();
+            var info = f != null && f.ConstructionInfo != null ? f.ConstructionInfo.Split('|') : null;
+            Func<int, double> num = i => double.Parse(info[i], CI);
+            if (info != null && info[0] == "Width" && info.Length >= 3)
+                lines.Insert(0, "Width     " + u.L(num(1)) + " " + u.U + (num(2) > 0.01 ? string.Format(CI, "   (planes {0:0.000}° apart)", num(2)) : ""));
+            if (info != null && info[0] == "Bolt circle" && info.Length >= 4)
+                lines.Add(string.Format(CI, "{0:0} centres, every {1:0.###}°, largest off the circle {2} {3}", num(1), num(3), u.L(num(2)), u.U));
+            return lines;
+        }
+
+        static IEnumerable<string> DescribeCore(Primitive g, Feature f, UnitFmt u)
+        {
             var r = new List<string>();
             if (g == null) { r.Add(f.FitError ?? "not solved"); return r; }
             Func<Vec3, string> V = v => u.L(v.X) + ", " + u.L(v.Y) + ", " + u.L(v.Z);

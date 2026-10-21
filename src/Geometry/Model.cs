@@ -53,6 +53,11 @@ namespace MicroScribe.Model
         /// <summary>For constructions: ids of the source features and the operation.</summary>
         public List<int> SourceIds = new List<int>();
         public string Construction;
+        /// <summary>Offset plane: distance along the source plane's normal (mm).</summary>
+        public double ConstructValue;
+        /// <summary>Constructions: a result worth showing (e.g. the width between two planes), and the points that size a constructed plane.</summary>
+        [XmlIgnore] public string ConstructionInfo;
+        [XmlIgnore] public List<Vec3> ConstructionPoints;
         public string Notes = "";
 
         // --- curves
@@ -145,6 +150,7 @@ namespace MicroScribe.Model
         public static void Solve(Project proj, Feature f)
         {
             f.FitError = null;
+            f.ConstructionInfo = null;
             if (f.Origin == FeatureOrigin.Constructed) { SolveConstruction(proj, f); return; }
             var pts = f.ActivePoints.ToList();
             int need = Fitter.MinPoints(f.Kind);
@@ -454,6 +460,82 @@ namespace MicroScribe.Model
                 case "center":
                     g = new PointPrim { Position = Constructions.KeyPoint(src[0].Geometry) };
                     break;
+                case "offset":
+                    {
+                        var pl = src[0].Geometry as PlanePrim;
+                        if (pl != null) g = new PlanePrim { Origin = pl.Origin + pl.Normal * f.ConstructValue, Normal = pl.Normal };
+                        break;
+                    }
+                case "midplane":
+                    {
+                        var a = src[0].Geometry as PlanePrim; var b = src[1].Geometry as PlanePrim;
+                        if (a == null || b == null) break;
+                        Vec3 nb = b.Normal.Dot(a.Normal) < 0 ? -b.Normal : b.Normal;
+                        Vec3 n = (a.Normal + nb).Normalized();
+                        Vec3 o = (a.Origin + b.Project(a.Origin)) * 0.5;
+                        g = new PlanePrim { Origin = o, Normal = n };
+                        double ang = Constructions.AngleBetween(a.Normal, b.Normal, true) * 180 / Math.PI;
+                        f.ConstructionInfo = string.Format(System.Globalization.CultureInfo.InvariantCulture, "Width|{0}|{1:0.000}", Math.Abs(b.SignedDistance(a.Origin)), ang);
+                        break;
+                    }
+                case "project":
+                    {
+                        var pl = src[1].Geometry as PlanePrim;
+                        if (pl == null) break;
+                        var s = src[0].Geometry;
+                        if (s is LinePrim || s is CylinderPrim || s is ConePrim)
+                        {
+                            Vec3 d = Constructions.Direction(s).Value, dp = d - pl.Normal * d.Dot(pl.Normal);
+                            if (dp.Length < 1e-9) { g = new PointPrim { Position = pl.Project(Constructions.KeyPoint(s)) }; break; }
+                            Vec3 o = pl.Project(Constructions.KeyPoint(s));
+                            dp = dp.Normalized();
+                            var ends = src[0].ActivePoints.Select(q => (pl.Project(q.Position) - o).Dot(dp)).ToList();
+                            g = new LinePrim { Origin = o, Direction = dp, TMin = ends.Count > 0 ? ends.Min() : -25, TMax = ends.Count > 0 ? ends.Max() : 25 };
+                        }
+                        else g = new PointPrim { Position = pl.Project(Constructions.KeyPoint(s)) };
+                        break;
+                    }
+                case "parallel":
+                    {
+                        var pl = src[1].Geometry as PlanePrim;
+                        if (pl != null) g = new PlanePrim { Origin = Constructions.KeyPoint(src[0].Geometry), Normal = pl.Normal };
+                        break;
+                    }
+                case "perpendicular":
+                    {
+                        var pl = src[1].Geometry as PlanePrim;
+                        var d = Constructions.Direction(src[0].Geometry);
+                        if (pl == null || !d.HasValue || src[0].Geometry is PlanePrim) break;
+                        Vec3 n = d.Value.Cross(pl.Normal);
+                        if (n.Length < 1e-6) break;
+                        g = new PlanePrim { Origin = Constructions.KeyPoint(src[0].Geometry), Normal = n.Normalized() };
+                        break;
+                    }
+                case "mirror":
+                    {
+                        var pl = src[1].Geometry as PlanePrim;
+                        if (pl == null || src[0].Geometry is CurvePrim || src[0].Geometry is SurfacePrim || src[0].Geometry is CloudPrim) break;
+                        Vec3 n = pl.Normal.Normalized();
+                        var m = Mat4.Identity();
+                        double[] nv = { n.X, n.Y, n.Z };
+                        double od = pl.Origin.Dot(n);
+                        for (int r = 0; r < 3; r++) { for (int c = 0; c < 3; c++) m[r, c] = (r == c ? 1 : 0) - 2 * nv[r] * nv[c]; m[r, 3] = 2 * od * nv[r]; }
+                        g = GeoUtil.Transform(src[0].Geometry, m);
+                        break;
+                    }
+                case "boltcircle":
+                case "centreplane":
+                    {
+                        var c = src.Select(s => Constructions.KeyPoint(s.Geometry)).ToArray();
+                        if (c.Length < 3) break;
+                        if (f.Construction == "centreplane") { g = Fitter.FitPlane(c); break; }
+                        var ci = Fitter.FitCircle(c);
+                        if (ci == null) break;
+                        g = ci;
+                        double worst = c.Max(q => Math.Abs(ci.SignedDistance(q)));
+                        f.ConstructionInfo = string.Format(System.Globalization.CultureInfo.InvariantCulture, "Bolt circle|{0}|{1}|{2}", c.Length, worst, 360.0 / c.Length);
+                        break;
+                    }
                 case "line2":
                     {
                         Vec3 a = Constructions.KeyPoint(src[0].Geometry), b = Constructions.KeyPoint(src[1].Geometry);
@@ -487,9 +569,14 @@ namespace MicroScribe.Model
                     l.TMin = t0; l.TMax = t1;
                 }
             }
-            if (g is LinePrim) f.Kind = FeatureKind.Line;
-            if (g is PointPrim) f.Kind = FeatureKind.Point;
-            g.Stats = FitStats.From(new double[0]);
+            f.Kind = g.Kind;
+            if (g is PlanePrim)
+            {
+                // size a constructed plane by what it was made from
+                f.ConstructionPoints = src.SelectMany(s => s.ActivePoints.Select(q => q.Position)).ToList();
+                if (f.ConstructionPoints.Count == 0) f.ConstructionPoints = src.Select(s => Constructions.KeyPoint(s.Geometry)).ToList();
+            }
+            if (g.Stats == null || f.Construction != "mirror") g.Stats = FitStats.From(new double[0]);
             f.RawFit = f.Geometry = g;
         }
 
@@ -533,7 +620,8 @@ namespace MicroScribe.Model
         public static void FitToPoints(Feature f, PlanePrim pl, double margin, out Vec3 center, out Vec3 u, out double w, out double h)
         {
             Vec3 a = pl.Normal.AnyPerpendicular(), b = pl.Normal.Cross(a);
-            var p2 = f.ActivePoints.Select(q => q.Position).Select(p => new[] { (p - pl.Origin).Dot(a), (p - pl.Origin).Dot(b) }).ToList();
+            var src = f.Origin == FeatureOrigin.Constructed && f.ConstructionPoints != null ? f.ConstructionPoints : f.ActivePoints.Select(q => q.Position).ToList();
+            var p2 = src.Select(p => new[] { (p - pl.Origin).Dot(a), (p - pl.Origin).Dot(b) }).ToList();
             if (p2.Count == 0) p2.Add(new[] { 0.0, 0.0 });
             var r = GeoUtil.MinAreaRectangle(p2, margin);
             Func<double[], Vec3> P = q => pl.Origin + a * q[0] + b * q[1];
