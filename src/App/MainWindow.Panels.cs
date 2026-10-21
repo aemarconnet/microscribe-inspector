@@ -130,6 +130,7 @@ namespace MicroScribe.App
                 case FeatureKind.Point: return "along the stylus";
                 case FeatureKind.Line: return "along the stylus, perpendicular to the line";
                 case FeatureKind.Surface: return "along the surface normal, on the stylus side";
+                case FeatureKind.Cloud: return "along the local surface normal, on the stylus side";
                 case FeatureKind.Curve:
                     return f.Compensation == CompensationSide.Auto ? "along the stylus, perpendicular to the curve"
                          : "in the curve's plane, " + (f.Compensation == CompensationSide.Outside ? "toward" : "away from") + " the enclosed area";
@@ -173,7 +174,7 @@ namespace MicroScribe.App
             var resCard = new StackPanel();
             resCard.Children.Add(Ui.Header("RESULTS"));
             resCard.Children.Add(res);
-            if (f.Origin == FeatureOrigin.Measured && f.Kind != FeatureKind.Curve && f.Kind != FeatureKind.Surface)
+            if (f.Origin == FeatureOrigin.Measured && !Fitter.IsTraced(f.Kind))
                 foreach (var warn in FitQuality.Warnings(f.Kind, f.RawFit, f.ActivePoints.Select(q => q.Position).ToList()))
                     resCard.Children.Add(Ui.Text("⚠ " + warn, 11.5, null, Brushes.DarkOrange));
             if (f.Origin == FeatureOrigin.Measured && f.RawFit != null && f.Geometry != null && f.ActivePoints.Any(q => q.ProbeRadius > 0))
@@ -193,7 +194,7 @@ namespace MicroScribe.App
             if (f.Origin == FeatureOrigin.Measured)
             {
                 // inside/outside only means something for closed shapes and for curves traced against a wall
-                bool sided = f.Kind != FeatureKind.Point && f.Kind != FeatureKind.Line && f.Kind != FeatureKind.Surface;
+                bool sided = f.Kind != FeatureKind.Point && f.Kind != FeatureKind.Line && f.Kind != FeatureKind.Surface && f.Kind != FeatureKind.Cloud;
                 var comp = new ComboBox { Width = 160 };
                 foreach (CompensationSide v in Enum.GetValues(typeof(CompensationSide)))
                     if (sided || v == CompensationSide.Auto || v == CompensationSide.None) comp.Items.Add(v);
@@ -221,7 +222,7 @@ namespace MicroScribe.App
                 full.Click += (s, e) => { f.FullRevolution = full.IsChecked == true; Changed(); };
                 opt.Children.Add(full);
             }
-            if (f.Kind != FeatureKind.Plane && f.Kind != FeatureKind.Curve && f.Kind != FeatureKind.Surface && f.Kind != FeatureKind.Point)
+            if (f.Kind != FeatureKind.Plane && !Fitter.IsTraced(f.Kind) && f.Kind != FeatureKind.Point)
                 opt.Children.Add(Ui.Row(Lbl("Surface margin"), Ui.LenBox(f.ExportMargin, v => { f.ExportMargin = Math.Max(0, v); Changed(); }), Ui.UnitLabel()));
             var vis = new CheckBox { Content = "Visible", IsChecked = f.Visible, Margin = new Thickness(0, 4, 12, 0) };
             vis.Click += (s, e) => { f.Visible = vis.IsChecked == true; Changed(); };
@@ -238,8 +239,13 @@ namespace MicroScribe.App
             var act = new WrapPanel();
             if (f.Origin == FeatureOrigin.Measured)
             {
-                act.Children.Add(Ui.Btn(f == _active ? "Finish" : f.Kind == FeatureKind.Surface ? "Trace more curves" : "Add points", () => { if (f == _active) FinishMeasure(); else ResumeMeasure(f); }));
-                if (f.Kind != FeatureKind.Curve && f.Kind != FeatureKind.Surface)
+                act.Children.Add(Ui.Btn(f == _active ? "Finish" : f.Kind == FeatureKind.Surface ? "Trace more curves" : f.Kind == FeatureKind.Cloud ? "Scan more" : "Add points", () => { if (f == _active) FinishMeasure(); else ResumeMeasure(f); }));
+                if (f.Kind == FeatureKind.Cloud)
+                {
+                    act.Children.Add(Ui.Btn("Thin to spacing", () => ThinCloud(f), "Exclude points closer than the curve spacing to an earlier point"));
+                    act.Children.Add(Ui.Btn("Remove strays", () => RemoveStrays(f), "Exclude isolated points (stray hits)"));
+                }
+                if (!Fitter.IsTraced(f.Kind))
                     act.Children.Add(Ui.Btn("Exclude outliers (>2.5σ)", () => ExcludeOutliers(f)));
                 act.Children.Add(Ui.Btn("Include all", () => { foreach (var q in f.Points) q.Excluded = false; Changed(); }));
                 act.Children.Add(Ui.Btn("Clear points", () =>
@@ -357,7 +363,7 @@ namespace MicroScribe.App
             pp.Children.Add(Ui.Header(string.Format("POINTS ({0} used of {1}) — X Y Z and residual, {2}", f.ActivePoints.Count(), f.Points.Count, Ui.U)));
             double worst = 0;
             var resid = new double[f.Points.Count];
-            bool traced = f.Kind == FeatureKind.Curve || f.Kind == FeatureKind.Surface;
+            bool traced = Fitter.IsTraced(f.Kind);
             for (int i = 0; i < f.Points.Count; i++)
             {
                 resid[i] = f.RawFit != null ? f.RawFit.SignedDistance(f.Points[i].Position) : double.NaN;
@@ -951,7 +957,23 @@ namespace MicroScribe.App
                 cs.Children.Add(Ui.Row(Lbl("Next after moving"), Ui.LenBox(_s.DwellRearm, v => _s.DwellRearm = Math.Max(0.1, v)), Ui.UnitLabel()));
                 cs.Children.Add(Ui.Text("Only while measuring a feature, calibrating or checking. Traced curves still use the pedal.", 11, null, Ui.Muted));
             }
+            var sm = new ComboBox { Width = 160 };
+            sm.Items.Add("By distance"); sm.Items.Add("By time"); sm.Items.Add("At section planes");
+            sm.SelectedIndex = (int)_s.ScanMode;
+            sm.SelectionChanged += (s, e) => { _s.ScanMode = (ScanMode)sm.SelectedIndex; RebuildArmPanel(); UpdatePrompt(); };
+            cs.Children.Add(Ui.Row(Lbl("Scan (pedal held)"), sm));
             cs.Children.Add(Ui.Row(Lbl("Curve point spacing"), Ui.LenBox(_s.CurveSpacing, v => _s.CurveSpacing = Math.Max(0.05, v)), Ui.UnitLabel()));
+            if (_s.ScanMode == ScanMode.Time)
+                cs.Children.Add(Ui.Row(Lbl("Scan interval (ms)"), Ui.NumBox(_s.ScanIntervalMs, v => _s.ScanIntervalMs = (int)Math.Max(10, Math.Min(5000, v)))));
+            if (_s.ScanMode == ScanMode.Sections)
+            {
+                var ax = new ComboBox { Width = 60 };
+                foreach (var a in new[] { "X", "Y", "Z" }) ax.Items.Add(a);
+                ax.SelectedIndex = _s.SectionAxis;
+                ax.SelectionChanged += (s, e) => _s.SectionAxis = ax.SelectedIndex;
+                cs.Children.Add(Ui.Row(Lbl("Section planes ⟂ part"), ax, Ui.Text("  every ", 12, null, Ui.Muted), Ui.LenBox(_s.SectionSpacing, v => _s.SectionSpacing = Math.Max(0.1, v)), Ui.UnitLabel()));
+                cs.Children.Add(Ui.Text("Sweep back and forth along that axis (across the planes) while moving slowly sideways: a point is kept wherever the ball centre crosses a plane. Freeform surfaces loft through the sections; curves always use the distance.", 11, null, Ui.Muted));
+            }
             cs.Children.Add(Ui.Row(Lbl("Default margin"), Ui.LenBox(_s.DefaultExportMargin, v => _s.DefaultExportMargin = Math.Max(0, v)), Ui.UnitLabel()));
             Func<PedalAction, Action<PedalAction>, ComboBox> pedal = (cur, set) =>
             {

@@ -155,7 +155,7 @@ namespace MicroScribe.App
                 {
                     _scanning = false;
                     // the traced curve/section is complete: solve once and give feedback
-                    if (_active != null && (_active.Kind == FeatureKind.Curve || _active.Kind == FeatureKind.Surface))
+                    if (_active != null && Fitter.IsTraced(_active.Kind))
                     {
                         FeatureSolver.Solve(_proj, _active);
                         Sounds.Good();
@@ -191,13 +191,14 @@ namespace MicroScribe.App
                 // Quick start: capturing without an active feature starts an Auto feature.
                 StartMeasure(null);
             }
-            if (_active.Kind == FeatureKind.Curve || _active.Kind == FeatureKind.Surface)
+            if (Fitter.IsTraced(_active.Kind))
             {
                 if (dwell) return; // tracing needs the pedal held
                 // pedal held = trace; each new press on a freeform surface starts a new curve
                 if (_active.Kind == FeatureKind.Surface && at != null && _active.Points.Any(p => p.Section == _section)) _section++;
                 _scanning = at != null; // keyboard: single point; pedal: hold to scan
-                AddPoint(s.Tip, s.Direction, true);
+                if (_scanning) { BeginScan(s); if (ScanFeed(new[] { s })) RebuildScene(); UpdatePrompt(); }
+                else AddPoint(s.Tip, s.Direction, true);
                 return;
             }
             Capture(s, at, dwell, (p, d) => AddPoint(p, d));
@@ -256,7 +257,7 @@ namespace MicroScribe.App
         {
             if (_s.DwellMs <= 0 || s == null || _scanning || _captureStart >= 0) return;
             bool wanted = _pivotActive || _check != CheckMode.None || _pairProbing || _tool == Tool.TraceArea || _tool == Tool.ProbeTable
-                || (_active != null && _active.Kind != FeatureKind.Curve && _active.Kind != FeatureKind.Surface);
+                || (_active != null && !Fitter.IsTraced(_active.Kind));
             if (!wanted) { _dwellArmed = true; return; }
             if (!_dwellArmed)
             {
@@ -302,7 +303,7 @@ namespace MicroScribe.App
         /// <summary>Plays the happy chime for a point that agrees with the fit, a low "hmm" for an outlier.</summary>
         void JudgePoint(Feature f, MeasuredPoint mp, bool traced)
         {
-            if (traced || f.Kind == FeatureKind.Curve || f.Kind == FeatureKind.Surface) { Sounds.Blip(); return; }
+            if (traced || Fitter.IsTraced(f.Kind)) { Sounds.Blip(); return; }
             int n = f.ActivePoints.Count();
             int need = _activeAuto ? 3 : Fitter.MinPoints(f.Kind);
             if (f.RawFit == null || n < need) { Sounds.Blip(); return; }
@@ -321,20 +322,54 @@ namespace MicroScribe.App
             }
         }
 
+        readonly ScanSampler _scanner = new ScanSampler();
+        long _scanTs;
+        int _scanRedraw;
+
+        /// <summary>Pedal pressed on a traced feature: set up the sampler for the chosen scan mode.</summary>
+        void BeginScan(ArmSample s)
+        {
+            var mode = _s.ScanMode;
+            if (mode == ScanMode.Sections && _active.Kind == FeatureKind.Curve) mode = ScanMode.Distance; // a curve is one trace
+            _scanner.Mode = mode;
+            _scanner.Spacing = _s.CurveSpacing; _scanner.IntervalMs = _s.ScanIntervalMs;
+            _scanner.Axis = _s.SectionAxis; _scanner.SectionSpacing = _s.SectionSpacing;
+            _scanner.ToPart = _proj.AlignmentMatrix;
+            _scanner.Reset();
+            _scanTs = s.Timestamp;
+            if (mode == ScanMode.Sections && _active.Kind == FeatureKind.Surface) { _active.SectionScan = true; _active.SectionNormal = _scanner.PlaneNormal; }
+        }
+
+        /// <summary>Runs arm samples through the sampler and records the points it keeps.</summary>
+        bool ScanFeed(IEnumerable<ArmSample> samples)
+        {
+            bool added = false;
+            foreach (var h in samples)
+                foreach (var k in _scanner.Feed(h.Tip, h.Direction, h.Timestamp * 1000.0 / System.Diagnostics.Stopwatch.Frequency))
+                {
+                    int sec = _active.Kind == FeatureKind.Surface ? (k.Section >= 0 ? k.Section : _section) : _active.Kind == FeatureKind.Cloud ? Math.Max(0, k.Section) : 0;
+                    _active.Points.Add(new MeasuredPoint(k.Tip, k.Direction, _s.CurrentTip.BallRadius) { Section = sec });
+                    added = true;
+                }
+            if (added)
+            {
+                _dirty = true;
+                if (_active.Kind == FeatureKind.Curve) _active.Geometry = null;
+            }
+            return added;
+        }
+
         void ScanTick(ArmSample s)
         {
-            if (!_scanning || _active == null || s == null) return;
-            if (_active.Kind != FeatureKind.Curve && _active.Kind != FeatureKind.Surface) return;
-            var last = _active.Points.LastOrDefault(p => p.Section == (_active.Kind == FeatureKind.Surface ? _section : 0));
-            if (last == null || (last.Position - s.Tip).Length >= Math.Max(0.05, _s.CurveSpacing))
-            {
-                _active.Points.Add(new MeasuredPoint(s.Tip, s.Direction, _s.CurrentTip.BallRadius) { Section = _active.Kind == FeatureKind.Surface ? _section : 0 });
-                _dirty = true;
-                _active.Geometry = _active.Kind == FeatureKind.Curve ? null : _active.Geometry;
-                UpdatePrompt();
-                RebuildScene();
-                RebuildFeatureList();
-            }
+            if (!_scanning || _active == null || s == null || !Fitter.IsTraced(_active.Kind)) return;
+            List<ArmSample> win;
+            lock (_histLock) win = _hist.Where(h => h.Timestamp > _scanTs).ToList();
+            if (win.Count == 0) return;
+            _scanTs = win[win.Count - 1].Timestamp;
+            if (!ScanFeed(win)) return;
+            UpdatePrompt();
+            // big scans: redraw a few times a second, not on every tick
+            if (_active.Points.Count < 400 || ++_scanRedraw % 5 == 0) { RebuildScene(); RebuildFeatureList(); }
         }
 
         // ------------------------------------------------------------------ measure session
@@ -429,6 +464,36 @@ namespace MicroScribe.App
             UpdatePrompt();
         }
 
+        string ScanModeText()
+        {
+            switch (_s.ScanMode)
+            {
+                case ScanMode.Time: return "a point every " + _s.ScanIntervalMs + " ms";
+                case ScanMode.Sections: return "a point at every " + Ui.LU(_s.SectionSpacing) + " along part " + "XYZ"[_s.SectionAxis];
+            }
+            return "a point every " + Ui.LU(_s.CurveSpacing);
+        }
+
+        void ThinCloud(Feature f)
+        {
+            var act = f.ActivePoints.ToList();
+            var keep = new HashSet<int>(CloudTools.Thin(act.Select(q => q.Position).ToList(), _s.CurveSpacing));
+            int n = 0;
+            for (int i = 0; i < act.Count; i++) if (!keep.Contains(i)) { act[i].Excluded = true; n++; }
+            Status(string.Format("{0}: {1} points closer than {2} excluded ({3} kept) — Include all restores them", f.Name, n, Ui.LU(_s.CurveSpacing), keep.Count));
+            Changed();
+        }
+
+        void RemoveStrays(Feature f)
+        {
+            var act = f.ActivePoints.ToList();
+            double r = Math.Max(1.0, 3 * _s.CurveSpacing);
+            var bad = CloudTools.Isolated(act.Select(q => q.Position).ToList(), r, 2);
+            foreach (int i in bad) act[i].Excluded = true;
+            Status(string.Format("{0}: {1} isolated points excluded (fewer than 2 neighbours within {2})", f.Name, bad.Count, Ui.LU(r)));
+            Changed();
+        }
+
         void UpdatePrompt()
         {
             string tp = ToolPrompt() ?? CheckPrompt() ?? ModelPrompt();
@@ -450,6 +515,12 @@ namespace MicroScribe.App
             int need = _activeAuto ? 3 : Fitter.MinPoints(_active.Kind);
             string hint;
             if (_active.Kind == FeatureKind.Curve) hint = "hold pedal 1 and trace";
+            else if (_active.Kind == FeatureKind.Cloud) hint = "hold pedal 1 and sweep over the surface (" + ScanModeText() + ")";
+            else if (_active.Kind == FeatureKind.Surface && _s.ScanMode == ScanMode.Sections)
+            {
+                int planes = _active.Points.Select(p => p.Section).Distinct().Count();
+                hint = string.Format("hold pedal 1 and sweep back and forth across the surface — {0} section{1} so far ({2})", planes, planes == 1 ? "" : "s", ScanModeText());
+            }
             else if (_active.Kind == FeatureKind.Surface)
             {
                 int curves = _active.Points.Select(p => p.Section).Distinct().Count();

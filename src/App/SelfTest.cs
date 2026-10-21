@@ -311,7 +311,7 @@ namespace MicroScribe.App
             });
             steps.Add(() => shot("11-plan"));
             steps.Add(() => { _s.ResultsLogPath = keepLog; StopPlan(); });
-            steps.Add(() => { File.WriteAllLines(Path.Combine(dir, "selftest.log"), log); DisconnectArm(); Close(); });
+            steps.Add(() => { File.WriteAllLines(Path.Combine(dir, "selftest.log"), log); _dirty = false; DisconnectArm(); Close(); });
 
             int k = 0;
             var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };

@@ -17,6 +17,59 @@ namespace MicroScribe.Tests
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("ball compensation: point, line, contact points", TestPointLineContact));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("probe qualification on a reference sphere", TestQualification));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("arm check statistics + stillness", TestArmCheck));
+            Program.ExtraTests.Add(new KeyValuePair<string, Action>("scan modes, section-plane surface, point clouds", TestScans));
+        }
+
+        static void TestScans()
+        {
+            // distance and time sampling
+            var sd = new ScanSampler { Mode = ScanMode.Distance, Spacing = 1 };
+            int n = 0;
+            for (int i = 0; i <= 100; i++) n += sd.Feed(new Vec3(i * 0.1, 0, 0), -Vec3.UnitZ, i * 16).Count;
+            Check(n == 11, "distance sampling kept {0}", n);
+            var st = new ScanSampler { Mode = ScanMode.Time, IntervalMs = 100 };
+            n = 0;
+            for (int i = 0; i <= 62; i++) n += st.Feed(new Vec3(0, 0, 0), -Vec3.UnitZ, i * 16).Count;
+            Check(n == 10 || n == 11, "time sampling kept {0}", n);
+
+            // section planes ⟂ x: sweep back and forth along x (across the planes) while creeping along y
+            var ss = new ScanSampler { Mode = ScanMode.Sections, Axis = 0, SectionSpacing = 10 };
+            var proj = new Project();
+            var f = proj.NewFeature(FeatureKind.Surface);
+            f.SectionScan = true; f.SectionNormal = ss.PlaneNormal;
+            for (int i = 0; i <= 4000; i++)
+            {
+                double x = 50 + 45 * Math.Sin(i * 0.05), y = 5 + i * 0.022;
+                Vec3 nrm = N(x, y), c = new Vec3(x, y, Z(x, y)) + nrm * R;
+                foreach (var k in ss.Feed(c, -nrm, i * 16))
+                {
+                    Check(Math.Abs(k.Tip.X - 10 * k.Section) < 1e-9, "crossing at x = {0} for plane {1}", k.Tip.X, k.Section);
+                    f.Points.Add(new MeasuredPoint(k.Tip, k.Direction, R) { Section = k.Section });
+                }
+            }
+            int planes = f.Points.Select(q => q.Section).Distinct().Count();
+            Check(planes == 9, "planes crossed {0}", planes);
+            FeatureSolver.Solve(proj, f);
+            Check(f.Geometry is SurfacePrim, "section scan lofts ({0})", f.FitError);
+            double worst = 0;
+            foreach (double x in new[] { 20.0, 40, 60, 80 }) foreach (double y in new[] { 20.0, 50, 80 }) worst = Math.Max(worst, Math.Abs(f.Geometry.SignedDistance(new Vec3(x, y, Z(x, y)))));
+            Check(worst < 0.1, "section-scan surface off the true surface by {0}", worst);
+
+            // point cloud on a flat face: compensated along the local normal, thinned, strays found
+            var cl = proj.NewFeature(FeatureKind.Cloud);
+            for (int i = 0; i < 40; i++) for (int j = 0; j < 40; j++)
+                cl.Points.Add(new MeasuredPoint(new Vec3(i * 0.5, j * 0.5, R), new Vec3(0.3, 0.1, -1).Normalized(), R));
+            cl.Points.Add(new MeasuredPoint(new Vec3(100, 100, 50), -Vec3.UnitZ, R));
+            FeatureSolver.Solve(proj, cl);
+            var cp = (CloudPrim)cl.Geometry;
+            double dz = cp.Points.Take(1600).Max(q => Math.Abs(q.Z));
+            Check(dz < 1e-6, "cloud contact points on z = 0 ({0})", dz);
+            var keep = CloudTools.Thin(cl.Points.Take(1600).Select(q => q.Position).ToList(), 1.0);
+            Check(keep.Count == 400, "thinned to {0}", keep.Count);
+            var stray = CloudTools.Isolated(cl.Points.Select(q => q.Position).ToList(), 1.5, 2);
+            Check(stray.Count == 1 && stray[0] == 1600, "stray points {0}", stray.Count);
+            var xyz = FeatureSolver.ContactPoints(cl, cl.Points);
+            Check(xyz.Count == cl.Points.Count && Math.Abs(xyz[5].Z) < 1e-6, "cloud contact points for export");
         }
 
         static readonly Random Rng = new Random(4242);

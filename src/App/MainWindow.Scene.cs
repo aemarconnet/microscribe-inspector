@@ -166,7 +166,7 @@ namespace MicroScribe.App
 
             // probed points
             var inc = new MeshBuilder(); var exc = new MeshBuilder();
-            bool traced = f.Kind == FeatureKind.Curve || f.Kind == FeatureKind.Surface;
+            bool traced = Fitter.IsTraced(f.Kind);
             double pr = _marker * (sel ? 1.15 : 0.85) * (traced ? 0.6 : 1);
             var pts = f.Points.Select(p => M.TransformPoint(p.Position)).ToList();
             bool byDev = _s.ColorByDeviation && _proj.NominalModel != null && f.Origin == FeatureOrigin.Measured;
@@ -188,7 +188,7 @@ namespace MicroScribe.App
             double margin = f.ExportMargin;
 
             // raw traces: always for freeform sections, for curves while not solved yet (e.g. while scanning)
-            if ((f.Geometry == null || f.Kind == FeatureKind.Surface) && traced && pts.Count > 1)
+            if ((f.Geometry == null || f.Kind == FeatureKind.Surface) && traced && f.Kind != FeatureKind.Cloud && !f.SectionScan && pts.Count > 1)
             {
                 foreach (var grp in f.Points.Select((p, i) => new { p, i }).GroupBy(x => x.p.Section))
                     wire.Polyline(grp.Select(x => pts[x.i]).ToList(), _marker * 0.25);

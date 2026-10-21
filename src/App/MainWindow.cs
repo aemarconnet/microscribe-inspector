@@ -222,7 +222,7 @@ namespace MicroScribe.App
         static readonly FeatureKind?[] MeasureKinds =
         {
             FeatureKind.Point, FeatureKind.Line, FeatureKind.Plane, FeatureKind.Circle, FeatureKind.Cylinder, FeatureKind.Cone,
-            FeatureKind.Sphere, FeatureKind.Curve, FeatureKind.Surface, null
+            FeatureKind.Sphere, FeatureKind.Curve, FeatureKind.Surface, FeatureKind.Cloud, null
         };
 
         /// <summary>mm / inch display toggle (all values are stored in mm).</summary>
@@ -394,6 +394,7 @@ namespace MicroScribe.App
                 case FeatureKind.Sphere: return "Sphere — 4+ points spread over the ball";
                 case FeatureKind.Curve: return "Curve scan — hold pedal 1 and trace; points every N mm (spline or linear)";
                 case FeatureKind.Surface: return "Freeform surface — trace several curves across the surface (hold pedal 1 for each), then finish";
+                case FeatureKind.Cloud: return "Point cloud — hold pedal 1 and sweep the stylus over the surface (scan mode in Arm & tip); for best fits, profiles and XYZ export";
             }
             return "";
         }

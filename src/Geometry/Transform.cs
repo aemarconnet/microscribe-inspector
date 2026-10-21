@@ -21,6 +21,7 @@ namespace MicroScribe.Geometry
             else if (g is ConePrim) { var q = (ConePrim)g; q.AxisPoint = m.TransformPoint(q.AxisPoint); q.Axis = m.TransformVector(q.Axis); }
             else if (g is CurvePrim) { var t = ((CurvePrim)p).Transformed(m); t.Stats = p.Stats; return t; }
             else if (g is SurfacePrim) { var t = ((SurfacePrim)p).Transformed(m); t.Stats = p.Stats; return t; }
+            else if (g is CloudPrim) { var t = ((CloudPrim)p).Transformed(m); t.Stats = p.Stats; return t; }
             return g;
         }
 

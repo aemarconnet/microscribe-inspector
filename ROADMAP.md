@@ -42,7 +42,7 @@ Effort: **S** small · **M** medium · **L** large.
 
 ## Phase 3 — Capture and digitizing to CAD
 
-11. [ ] **More hard-probe scan modes** (M) — fixed time, section planes (a point each time the stylus
+11. [x] **More hard-probe scan modes** (M) — fixed time, section planes (a point each time the stylus
     crosses parallel planes at a set spacing) and free point-cloud scanning with filtering.
 12. [ ] **2D sketch from a probed profile** (M) — project onto a plane, split into lines and arcs,
     export DXF and SolidWorks curve files.

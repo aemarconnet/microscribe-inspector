@@ -5,7 +5,7 @@ using MicroScribe.Core;
 
 namespace MicroScribe.Geometry
 {
-    public enum FeatureKind { Point, Line, Plane, Circle, Sphere, Cylinder, Cone, Curve, Surface }
+    public enum FeatureKind { Point, Line, Plane, Circle, Sphere, Cylinder, Cone, Curve, Surface, Cloud }
 
     /// <summary>Residual statistics of a fit (signed residuals, mm).</summary>
     public sealed class FitStats
@@ -145,6 +145,9 @@ namespace MicroScribe.Geometry
     /// <summary>Least-squares fitting of geometric primitives to probed points.</summary>
     public static class Fitter
     {
+        /// <summary>Features captured by tracing with the pedal held (curves, freeform surfaces, point clouds).</summary>
+        public static bool IsTraced(FeatureKind k) { return k == FeatureKind.Curve || k == FeatureKind.Surface || k == FeatureKind.Cloud; }
+
         public static int MinPoints(FeatureKind k)
         {
             switch (k)
@@ -158,6 +161,7 @@ namespace MicroScribe.Geometry
                 case FeatureKind.Cone: return 6;
                 case FeatureKind.Curve: return 2;
                 case FeatureKind.Surface: return 4;
+                case FeatureKind.Cloud: return 3;
             }
             return 1;
         }

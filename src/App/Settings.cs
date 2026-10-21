@@ -106,6 +106,11 @@ namespace MicroScribe.App
         /// <summary>Report header and the CSV results log.</summary>
         public string ReportCompany = "", ReportLogoPath = "", ResultsLogPath = "";
         public double CurveSpacing = 1.0;    // mm between points while scanning a curve
+        /// <summary>Hard-probe scanning: by distance, by time, or a point at each section plane (part-frame axis).</summary>
+        public MicroScribe.Geometry.ScanMode ScanMode = MicroScribe.Geometry.ScanMode.Distance;
+        public int ScanIntervalMs = 100;
+        public int SectionAxis = 0;
+        public double SectionSpacing = 5;
         public double DefaultExportMargin = 2.0;
         public bool ShowArm = true;
         public bool ShowLabels = true;

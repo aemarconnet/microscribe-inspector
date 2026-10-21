@@ -90,6 +90,12 @@ namespace MicroScribe.Export
                     else w.AddBSpline(f.Name, c.Degree, c.Ctrl, c.Knots);
                     wires++;
                 }
+                else if (g is CloudPrim)
+                {
+                    int k = 1;
+                    foreach (var q in ((CloudPrim)g).Points) { w.AddPoint(f.Name + " " + (k++), q); wires++; }
+                    continue;
+                }
                 else if (g is SurfacePrim && opt.Surfaces)
                 {
                     var s = (SurfacePrim)g;
@@ -311,6 +317,13 @@ namespace MicroScribe.Export
             Func<Vec3, string> V = v => u.L(v.X) + ", " + u.L(v.Y) + ", " + u.L(v.Z);
             Func<Vec3, string> D = v => string.Format(CI, "{0:0.00000}, {1:0.00000}, {2:0.00000}", v.X, v.Y, v.Z);
             string un = " " + u.U;
+            if (g is CloudPrim)
+            {
+                var c = (CloudPrim)g; Vec3 lo, hi; c.Bounds(out lo, out hi);
+                r.Add("Point cloud, " + c.Points.Length + " points");
+                if (c.Points.Length > 0) r.Add("Extent    " + u.L(hi.X - lo.X) + " × " + u.L(hi.Y - lo.Y) + " × " + u.L(hi.Z - lo.Z) + un);
+                return r;
+            }
             if (g is PointPrim) r.Add("Position  " + V(((PointPrim)g).Position) + un);
             else if (g is LinePrim) { var l = (LinePrim)g; r.Add("Point     " + V(l.Origin) + un); r.Add("Direction " + D(l.Direction)); r.Add("Length    " + u.L(l.TMax - l.TMin) + un); }
             else if (g is PlanePrim)

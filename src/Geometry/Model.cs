@@ -70,6 +70,10 @@ namespace MicroScribe.Model
         // --- freeform surfaces
         /// <summary>Control points along each traced curve (0 = automatic). Fewer = smoother.</summary>
         public int SurfaceCtrlU;
+        /// <summary>Section-plane scan: points lie on parallel planes (normal in the machine frame), Section = plane index.</summary>
+        public bool SectionScan;
+        public double SNX, SNY, SNZ = 1;
+        [XmlIgnore] public Vec3 SectionNormal { get { return new Vec3(SNX, SNY, SNZ); } set { SNX = value.X; SNY = value.Y; SNZ = value.Z; } }
 
         /// <summary>Fit of the probe-tip centres (before compensation).</summary>
         [XmlIgnore] public Primitive RawFit;
@@ -154,9 +158,20 @@ namespace MicroScribe.Model
                 catch (Exception ex) { f.RawFit = f.Geometry = null; f.FitError = ex.Message; }
                 return;
             }
+            if (f.Kind == FeatureKind.Cloud)
+            {
+                f.RawFit = f.Geometry = new CloudPrim { Points = ContactPoints(f, pts).ToArray(), Stats = FitStats.From(new double[0]) };
+                return;
+            }
             if (f.Kind == FeatureKind.Surface)
             {
                 var groups = pts.GroupBy(q => q.Section).OrderBy(g => g.Key).Select(g => g.ToList()).ToList();
+                if (f.SectionScan)
+                {
+                    // crossings arrive in sweep order: sort each plane's points along the surface first
+                    Vec3 along = CloudTools.SweepDirection(pts.Select(q => q.Position), f.SectionNormal);
+                    groups = groups.Select(g => g.OrderBy(q => q.Position.Dot(along)).ToList()).Where(g => g.Count >= 2).ToList();
+                }
                 string err;
                 var raw = Loft.Build(groups.Select(g => g.Select(q => q.Position).ToList()).ToList(), f.SurfaceCtrlU, out err);
                 f.RawFit = f.Geometry = raw;
@@ -312,6 +327,14 @@ namespace MicroScribe.Model
             if (f.Origin == FeatureOrigin.Constructed || f.Compensation == CompensationSide.None || pts.All(q => q.ProbeRadius <= 0))
                 return pts.Select(q => q.Position).ToList();
             if (f.Kind == FeatureKind.Curve) return CompensateCurve(pts, f.Compensation, f.Closed);
+            if (f.Kind == FeatureKind.Cloud)
+            {
+                // neighbourhood for the local normals: a few times the typical scan spacing
+                var c = pts.Select(q => q.Position).ToList();
+                var gaps = Enumerable.Range(1, Math.Max(0, c.Count - 1)).Select(i => (c[i] - c[i - 1]).Length).OrderBy(x => x).ToList();
+                double typical = gaps.Count > 0 ? gaps[gaps.Count / 2] : 1;
+                return CloudTools.Compensate(c, pts.Select(q => q.Direction).ToList(), pts.Select(q => q.ProbeRadius).ToList(), Math.Max(2.0, 4 * typical));
+            }
             var surf = f.RawFit as SurfacePrim;
             if (surf != null) return pts.Select(q => SurfaceContact(surf, q)).ToList();
             return pts.Select(q => ContactPoint(f, q)).ToList();
@@ -322,7 +345,7 @@ namespace MicroScribe.Model
         {
             double r = q.ProbeRadius;
             if (r <= 0 || f.Compensation == CompensationSide.None) return q.Position;
-            if (f.Kind == FeatureKind.Curve || f.RawFit is SurfacePrim)
+            if (f.Kind == FeatureKind.Curve || f.Kind == FeatureKind.Cloud || f.RawFit is SurfacePrim)
             {
                 int i = f.Points.IndexOf(q);
                 return i >= 0 ? ContactPoints(f, f.Points)[i] : q.Position;
