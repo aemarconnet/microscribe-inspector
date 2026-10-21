@@ -21,6 +21,23 @@ namespace MicroScribe.Tests
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("inspection plan runs and SPC", TestPlanSpc));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("constructions: offset, mid-plane, projection, mirror, bolt circle", TestConstructions));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("constrained fits: fixed size, parallel, perpendicular", TestConstrained));
+            Program.ExtraTests.Add(new KeyValuePair<string, Action>("temperature correction to 20 °C", TestTemperature));
+        }
+
+        static void TestTemperature()
+        {
+            var p = new Project();
+            var a = Plane(p, 0); var b = Plane(p, 100);
+            var d = new Dimension { Kind = DimKind.Distance, Refs = { new EntityRef { FeatureId = a.Id }, new EntityRef { FeatureId = b.Id } } };
+            Func<double> L = () => { FeatureSolver.SolveAll(p); return DimensionSolver.Evaluate(p, d).Value; };
+            Check(Math.Abs(L() - 100) < 1e-9, "start");
+            // a steel part measured at 30 °C is 0.115 mm per metre longer than at 20 °C
+            p.ApplyTemperature(true, 30, 11.5);
+            Check(Math.Abs(L() - 100 / (1 + 11.5e-6 * 10)) < 1e-9, "corrected length {0}", L());
+            p.ApplyTemperature(true, 25, 23);   // re-scaling is relative to what is applied
+            Check(Math.Abs(L() - 100 / (1 + 23e-6 * 5)) < 1e-9, "changed temperature and material {0}", L());
+            p.ApplyTemperature(false, 25, 23);
+            Check(Math.Abs(L() - 100) < 1e-9 && p.TempScale == 1, "switched off");
         }
 
         static void TestConstrained()

@@ -37,6 +37,7 @@ written from **public protocol documentation** and **observation of the device i
 | Planes | Resize by dragging handles or typing a size; extend or trim to another plane so faces meet for knitting. |
 | Constructions | Intersections, midpoints, axes, centres, corners; offset plane, mid-plane (with the width between two faces), projection onto a plane, plane through a feature parallel or perpendicular to a datum, mirror, bolt circle and plane through hole centres. |
 | Alignment | 3-2-1 from features or principal axes, 90° turns, origin at a feature or at any bounding-box corner, face centre or centre (clickable handles). |
+| Large parts | Leapfrog: touch 3+ cone seats again after moving the arm and measuring continues in the same coordinates. Temperature correction to 20 °C for the part's material. |
 | View | Work area: sketch the usable table area and a height once, and *Fit* always frames it. 3Dconnexion SpaceMouse navigation. mm / inch toggle. |
 | Export | STEP AP214 (analytic and B-spline surfaces plus axes, centres, curves), IGES (exact B-spline surfaces and curves), STL mesh, DXF sketches, CSV, XYZ point cloud. Projects are plain XML (`.msproj`). |
 | Inspection plans | Measure the first part once, then replay it on the next parts step by step: markers show where to probe, each step ends after the planned points, results show pass/fail; next part with the serial number counted up. |

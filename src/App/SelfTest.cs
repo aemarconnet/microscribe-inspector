@@ -278,6 +278,38 @@ namespace MicroScribe.App
                 _dirty = false;
                 _s.WorkArea = new WorkArea();
             });
+            // leapfrog: four cone seats, the arm moved (turned 15° and shifted), seats touched again
+            steps.Add(() =>
+            {
+                var seats = new[] { new Vec3(300, -100, -80), new Vec3(520, -80, -80), new Vec3(480, 140, -80), new Vec3(280, 110, -80) };
+                foreach (var q in seats)
+                {
+                    var sf = _proj.NewFeature(FeatureKind.Point, "Seat");
+                    sf.Compensation = CompensationSide.None;
+                    sf.Points.Add(new MeasuredPoint(q, -Vec3.UnitZ, 0));
+                    FeatureSolver.Solve(_proj, sf);
+                    _proj.LeapRefIds.Add(sf.Id);
+                }
+                double a = 15 * Math.PI / 180;
+                var move = Mat4.Identity();
+                move[0, 0] = Math.Cos(a); move[0, 1] = -Math.Sin(a); move[1, 0] = Math.Sin(a); move[1, 1] = Math.Cos(a); move[0, 3] = -180; move[1, 3] = 40; move[2, 3] = 3;
+                StartLeap();
+                // the arm's readings of the seats after the move (LeapCapture would ask for confirmation after the last one)
+                foreach (var q in seats) _leapRaw.Add(move.TransformPoint(q) + new Vec3(0.01, -0.01, 0.005));
+            });
+            steps.Add(() =>
+            {
+                double rms, max;
+                var t = ComputeLeap(out rms, out max);
+                ApplyLeap(t, rms, max);
+                _leapMode = false; _leapRaw.Clear(); UpdatePrompt();
+                var seen = Tx(new MicroScribe.Driver.ArmSample { Tip = new Vec3(0, 0, 0), Direction = Vec3.UnitZ });
+                check(string.Format(Ui.CI, "leapfrog: {0}; arm origin now reads {1:0.000} {2:0.000} {3:0.000}", _proj.ArmMoveNote, seen.Tip.X, seen.Tip.Y, seen.Tip.Z));
+                _tabs.SelectedIndex = 4; RebuildWorkspacePanel();
+            });
+            steps.Add(() => shot("12-leapfrog"));
+            steps.Add(() => { _proj.ArmTransform = null; foreach (var id in _proj.LeapRefIds) _proj.Features.RemoveAll(x => x.Id == id); _proj.LeapRefIds.Clear(); RebuildAll(); });
+
             // inspection plan: replay the demo project on a "next part" (the plan's points, slightly moved), log three parts
             string keepLog = null;
             steps.Add(() =>

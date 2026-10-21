@@ -59,7 +59,7 @@ namespace MicroScribe.App
             }
             _arm = dev;
             dev.SampleReceived += OnSample;
-            dev.ButtonChanged += (b, down, s) => Dispatcher.BeginInvoke(new Action(() => OnButton(b, down, s)));
+            dev.ButtonChanged += (b, down, s) => Dispatcher.BeginInvoke(new Action(() => OnButton(b, down, Tx(s))));
             dev.StateChanged += (st, msg) => Dispatcher.BeginInvoke(new Action(() => OnArmState(st, msg)));
             _connectBtn.IsEnabled = false;
             _statusText.Text = "Connecting...";
@@ -138,7 +138,7 @@ namespace MicroScribe.App
         {
             lock (_histLock)
             {
-                _hist.AddLast(s);
+                _hist.AddLast(Tx(s));
                 while (_hist.Count > 400) _hist.RemoveFirst();
             }
         }
@@ -168,7 +168,7 @@ namespace MicroScribe.App
             else if (down)
             {
                 if (act == PedalAction.Finish) { if (!ToolFinish() && !CheckFinish() && !ModelPickFinish()) FinishMeasure(); }
-                else if (act == PedalAction.Undo) { if (!ToolUndo() && !CheckUndo() && !ModelPickUndo()) UndoPoint(); }
+                else if (act == PedalAction.Undo) { if (!ToolUndo() && !CheckUndo() && !ModelPickUndo() && !LeapUndo()) UndoPoint(); }
             }
         }
 
@@ -180,12 +180,13 @@ namespace MicroScribe.App
         /// </summary>
         void CapturePressed(ArmSample at = null, bool dwell = false)
         {
-            var s = at ?? (_arm != null ? _arm.Latest : null);
+            var s = at ?? Latest;
             if (s == null) { Status("No arm data — connect the arm or the simulator"); return; }
             if (_pivotActive) { CapturePivot(); return; }
             if (ToolCapture(s)) return;
             if (_check != CheckMode.None) { Capture(s, at, dwell, CheckCapture); return; }
             if (_pairProbing) { Capture(s, at, dwell, PairCapture); return; }
+            if (_leapMode) { Capture(s, at, dwell, LeapCapture); return; }
             if (_active == null)
             {
                 // Quick start: capturing without an active feature starts an Auto feature.
@@ -256,7 +257,7 @@ namespace MicroScribe.App
         void DwellTick(ArmSample s)
         {
             if (_s.DwellMs <= 0 || s == null || _scanning || _captureStart >= 0) return;
-            bool wanted = _pivotActive || _check != CheckMode.None || _pairProbing || _tool == Tool.TraceArea || _tool == Tool.ProbeTable
+            bool wanted = _pivotActive || _check != CheckMode.None || _pairProbing || _leapMode || _tool == Tool.TraceArea || _tool == Tool.ProbeTable
                 || (_active != null && !Fitter.IsTraced(_active.Kind));
             if (!wanted) { _dwellArmed = true; return; }
             if (!_dwellArmed)
@@ -496,7 +497,7 @@ namespace MicroScribe.App
 
         void UpdatePrompt()
         {
-            string tp = ToolPrompt() ?? CheckPrompt() ?? ModelPrompt();
+            string tp = ToolPrompt() ?? CheckPrompt() ?? ModelPrompt() ?? LeapPrompt();
             if (tp != null)
             {
                 _prompt.Text = tp + "     (Esc = stop)";
@@ -544,7 +545,7 @@ namespace MicroScribe.App
         void UiTick()
         {
             CompleteCapture();
-            var s = _arm != null ? _arm.Latest : null;
+            var s = Latest;
             ScanTick(s);
             DwellTick(s);
             bool inch = _s.InchDisplay;

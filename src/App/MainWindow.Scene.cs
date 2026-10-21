@@ -57,7 +57,7 @@ namespace MicroScribe.App
         void FitFeatures()
         {
             var pts = DisplayPoints();
-            var s = _arm != null ? _arm.Latest : null;
+            var s = Latest;
             if (s != null) pts.Add(DisplayMatrix.TransformPoint(s.Tip));
             if (pts.Count == 0) { pts.Add(new Vec3(-150, -150, -50)); pts.Add(new Vec3(350, 150, 150)); }
             if (pts.Count == 1) { pts.Add(pts[0] + new Vec3(40, 40, 40)); pts.Add(pts[0] - new Vec3(40, 40, 40)); }

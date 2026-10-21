@@ -60,11 +60,13 @@ Effort: **S** small · **M** medium · **L** large.
 
 ## Phase 4 — Larger parts and conditions
 
-17. [ ] **Leapfrog** (M) — move the arm using three or more cone seats or spheres, best-fit the
+17. [x] **Leapfrog** (M) — move the arm using three or more cone seats or spheres, best-fit the
     transform and report the added error.
-18. [ ] **Temperature correction** (S) — part temperature and material entered by hand, results
+18. [x] **Temperature correction** (S) — part temperature and material entered by hand, results
     scaled to 20 °C.
-19. [ ] **Faster sampling** (S) — 115200 baud for denser scans (needs a hardware test).
+19. [ ] **Faster sampling** (S) — 115200 baud for denser scans. A "Find fastest…" test (Arm & tip →
+    Connection) measures the readings per second at each baud rate and keeps the best; still to be
+    confirmed on a real arm.
 
 ## Ongoing
 

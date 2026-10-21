@@ -603,9 +603,10 @@ namespace MicroScribe.App
             {
                 case Key.Space: CapturePressed(); e.Handled = true; break;
                 case Key.Enter: if (!ToolFinish() && !CheckFinish() && !ModelPickFinish()) FinishMeasure(); e.Handled = true; break;
-                case Key.Back: if (!ToolUndo() && !CheckUndo() && !ModelPickUndo()) UndoPoint(); e.Handled = true; break;
+                case Key.Back: if (!ToolUndo() && !CheckUndo() && !ModelPickUndo() && !LeapUndo()) UndoPoint(); e.Handled = true; break;
                 case Key.Escape:
-                    if (_tool == Tool.ModelPick || _pairProbing) CancelPointPairs();
+                    if (_leapMode) CancelLeap();
+                    else if (_tool == Tool.ModelPick || _pairProbing) CancelPointPairs();
                     else if (_tool != Tool.Select) SetTool(Tool.Select);
                     else if (_check != CheckMode.None) ToggleCheck(_check);
                     else CancelMeasure();

@@ -121,6 +121,46 @@ namespace MicroScribe.Model
         public string ModelPath = "";
         /// <summary>Report header: part number, serial number and operator of this measurement.</summary>
         public string PartNumber = "", PartSerial = "", Operator = "";
+        /// <summary>Leapfrog: the arm's current readings → its original position (row-major 16; null = never moved), and the reference seats.</summary>
+        public double[] ArmTransform;
+        public int ArmMoves;
+        public string ArmMoveNote = "";
+        public List<int> LeapRefIds = new List<int>();
+        /// <summary>
+        /// Temperature correction to 20 °C: part temperature (°C), expansion coefficient (µm/m·K) and material,
+        /// and the scale now applied to every stored point (1 = none).
+        /// </summary>
+        public bool TempCorrection;
+        public double PartTemperature = 20, Cte = 11.5;
+        public string Material = "Steel";
+        public double TempScale = 1;
+
+        /// <summary>Length factor that brings the part from its temperature to 20 °C.</summary>
+        public static double TemperatureScale(double tempC, double cteMicro) { return 1 / (1 + cteMicro * 1e-6 * (tempC - 20)); }
+
+        /// <summary>
+        /// Switches the temperature correction: every stored point (and resized plane) is scaled about the arm's
+        /// origin so that all lengths read as at 20 °C. Re-scaling is relative, so it can be changed at any time.
+        /// </summary>
+        public void ApplyTemperature(bool on, double tempC, double cteMicro)
+        {
+            double target = on ? TemperatureScale(tempC, cteMicro) : 1;
+            double k = target / (TempScale <= 0 ? 1 : TempScale);
+            TempCorrection = on; PartTemperature = tempC; Cte = cteMicro; TempScale = target;
+            if (Math.Abs(k - 1) < 1e-15) return;
+            foreach (var f in Features)
+            {
+                foreach (var q in f.Points) q.Position = q.Position * k;
+                if (f.CustomBounds) { f.BoundsCenter = f.BoundsCenter * k; f.BW *= k; f.BH *= k; }
+            }
+        }
+        [XmlIgnore] public bool ArmMoved { get { return ArmTransform != null && ArmTransform.Length == 16; } }
+        [XmlIgnore]
+        public Mat4 ArmMatrix
+        {
+            get { var m = Mat4.Identity(); if (ArmMoved) Array.Copy(ArmTransform, m.M, 16); return m; }
+            set { ArmTransform = (double[])value.M.Clone(); }
+        }
         public double ModelScale = 1;
         [XmlIgnore] public TriMesh NominalModel;
 

@@ -235,6 +235,8 @@ namespace MicroScribe.App
             if (a != null) parts.Add(string.Format("single-point max {0} ({1:yyyy-MM-dd}, {2})", Ui.LU(a.MaxDeviation), a.Date, a.Pass ? "pass" : "FAIL"));
             if (b != null) parts.Add(string.Format("length error max {0} ({1:yyyy-MM-dd}, {2})", Ui.LU(b.MaxDeviation), b.Date, b.Pass ? "pass" : "FAIL"));
             double e = _s.MeasuringError;
+            if (_proj.ArmMoved) parts.Add(_proj.ArmMoveNote);
+            if (_proj.TempCorrection) parts.Add(string.Format(Ui.CI, "part at {0:0.#} °C ({1}, {2:0.#} µm/m·K) corrected to 20 °C", _proj.PartTemperature, _proj.Material, _proj.Cte));
             return "Arm check: " + string.Join("; ", parts) + string.Format(". Measuring error ≈ ±{0}: tolerances tighter than ±{1} cannot be judged reliably.",
                 Ui.LU(e), Ui.LU(4 * e));
         }
@@ -244,6 +246,52 @@ namespace MicroScribe.App
         {
             double e = _s.MeasuringError;
             return !double.IsNaN(e) && e > 0 && Math.Abs(tolerance) < 4 * e;
+        }
+
+        /// <summary>
+        /// Connects at each baud rate in turn (sign-on and position readings only) and keeps the one that
+        /// gives the most readings per second — faster rates give denser scans.
+        /// </summary>
+        void FindFastestBaud()
+        {
+            if (_s.Driver == "simulator") { Status("Choose the MicroScribe driver (not the simulator) first"); return; }
+            string port = (_portBox.Text ?? "").Trim().ToUpperInvariant();
+            if (MessageBox.Show(this, "Connect to the arm on " + port + " at each baud rate in turn and measure how many readings per second it delivers?\n\n" +
+                "Takes about 20 seconds. Only sign-on and position readings are used; nothing is written to the arm.", "Fastest baud rate",
+                MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+            DisconnectArm();
+            var t = new System.Threading.Thread(() =>
+            {
+                var results = new List<KeyValuePair<int, double>>();
+                foreach (int baud in new[] { 115200, 57600, 38400, 19200, 9600 })
+                {
+                    Dispatcher.BeginInvoke(new Action(() => Status("Trying " + baud + " baud…")));
+                    var arm = new MicroScribe.Driver.MicroScribeArm(port, baud);
+                    try
+                    {
+                        arm.Connect();
+                        if (arm.ActiveBaud == baud)
+                        {
+                            System.Threading.Thread.Sleep(2500);
+                            results.Add(new KeyValuePair<int, double>(baud, arm.SampleRate));
+                        }
+                    }
+                    catch { }
+                    finally { try { arm.Disconnect(); } catch { } arm.Dispose(); }
+                    System.Threading.Thread.Sleep(300);
+                }
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (results.Count == 0) { MessageBox.Show(this, "The arm did not answer at any baud rate. Check the cable, the port and that the arm is on.", "Fastest baud rate"); return; }
+                    var best = results.OrderByDescending(r => r.Value).First();
+                    _s.Baud = best.Key;
+                    _s.Save();
+                    MessageBox.Show(this, string.Join("\n", results.Select(r => string.Format(Ui.CI, "{0,7} baud: {1:0} readings/s", r.Key, r.Value))) +
+                        "\n\nUsing " + best.Key + " baud from now on (Arm & tip → Connection).", "Fastest baud rate", MessageBoxButton.OK, MessageBoxImage.Information);
+                    RebuildArmPanel();
+                }));
+            }) { IsBackground = true };
+            t.Start();
         }
 
         /// <summary>On connect: remind when the last arm check is missing or older than the interval.</summary>

@@ -882,7 +882,7 @@ namespace MicroScribe.App
             var hb = Ui.LenBox(wa.Height, v => { wa.Height = Math.Max(1, v); _s.Save(); RebuildScene(); RebuildWorkspacePanel(); });
             var useTip = Ui.Btn("Use stylus height", () =>
             {
-                var s = _arm != null ? _arm.Latest : null;
+                var s = Latest;
                 if (s == null) { Status("Connect the arm first"); return; }
                 wa.Height = Math.Max(1, (s.Tip - wa.TableOrigin).Dot(wa.TableNormal));
                 _s.Save(); RebuildScene(); RebuildWorkspacePanel();
@@ -954,6 +954,8 @@ namespace MicroScribe.App
                 Ui.Btn("▶", () => Sounds.Good(), "Play the good-point chime"), Ui.Btn("▶ done", () => Sounds.Success(), "Play the feature-finished chime"), Ui.Btn("▶ off", () => Sounds.Warn(), "Play the outlier tone")));
             us.Children.Add(Ui.Text("A point is 'good' when it lies within this limit (or 3σ, whichever is larger) of the fit through the other points.", 11, null, Ui.Muted));
             p.Children.Add(Ui.Card(us));
+            p.Children.Add(Ui.Card(TemperatureCard()));
+            p.Children.Add(Ui.Card(LeapCard()));
         }
 
         // ================================================================== Arm & tip tab
@@ -1077,7 +1079,7 @@ namespace MicroScribe.App
             foreach (var bd in new[] { "Auto", "9600", "19200", "38400", "57600", "115200" }) baud.Items.Add(bd);
             baud.LostFocus += (s, e) => { int v; _s.Baud = int.TryParse(baud.Text, out v) ? v : 0; };
             baud.SelectionChanged += (s, e) => { int v; _s.Baud = baud.SelectedItem != null && int.TryParse(baud.SelectedItem.ToString(), out v) ? v : 0; };
-            cs.Children.Add(Ui.Row(Lbl("Baud rate"), baud));
+            cs.Children.Add(Ui.Row(Lbl("Baud rate"), baud, Ui.Btn("Find fastest…", FindFastestBaud, "Measure the readings per second at each baud rate and keep the best")));
             p.Children.Add(Ui.Card(cs));
         }
 
@@ -1096,7 +1098,7 @@ namespace MicroScribe.App
 
         void CapturePivot()
         {
-            var s = _arm != null ? _arm.Latest : null;
+            var s = _arm != null ? _arm.Latest : null;   // the tip offset lives in the arm's own frame
             if (s == null || s.StylusFrame == null) { Status("No arm data"); return; }
             if (!_pivotActive) { _pivotActive = true; _pivotFrames.Clear(); }
             _pivotFrames.Add(s.StylusFrame.Clone());
