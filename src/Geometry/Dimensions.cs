@@ -7,7 +7,8 @@ using MicroScribe.Geometry;
 
 namespace MicroScribe.Model
 {
-    public enum DimKind { Distance, Angle, Diameter, Coordinate }
+    /// <summary>Measurements; Form and later kinds are geometric tolerances (see Gdt).</summary>
+    public enum DimKind { Distance, Angle, Diameter, Coordinate, Form, Parallelism, Perpendicularity, Angularity, Position, Coaxiality }
 
     /// <summary>Reference to a feature, or to one probed point of a feature (PointIndex ≥ 0).</summary>
     public sealed class EntityRef
@@ -23,6 +24,62 @@ namespace MicroScribe.Model
         public DimKind Kind;
         public List<EntityRef> Refs = new List<EntityRef>();
         public string Name;
+        /// <summary>
+        /// Nominal value and tolerance band (mm, or degrees for angles). Positions: nominal X/Y/Z in the
+        /// part frame, and the band applies to each axis.
+        /// </summary>
+        public bool Toleranced;
+        public double Nominal, TolPlus = 0.1, TolMinus = -0.1;
+        public double NX, NY, NZ;
+        /// <summary>Form tolerances: minimum-zone evaluation instead of least squares.</summary>
+        public bool MinZone;
+    }
+
+    public enum TolStatus { None, Pass, Fail }
+
+    /// <summary>Outcome of checking a dimension against its nominal value.</summary>
+    public sealed class TolResult
+    {
+        public TolStatus Status;
+        /// <summary>Measured − nominal (positions: the axis with the largest deviation).</summary>
+        public double Deviation;
+        /// <summary>Positions: deviation per axis in the part frame.</summary>
+        public Vec3 AxisDeviation;
+        public bool IsAngle;
+    }
+
+    public static class Tolerance
+    {
+        /// <summary>Checks a dimension against its nominal. <paramref name="partFrame"/>: machine → part (positions).</summary>
+        public static TolResult Evaluate(Dimension d, DimResult r, Mat4 partFrame)
+        {
+            var t = new TolResult { IsAngle = r != null && r.IsAngle };
+            if (!d.Toleranced || r == null || !r.Ok) return t;
+            const double eps = 1e-9;
+            Func<double, bool> inside = x => x <= d.TolPlus + eps && x >= d.TolMinus - eps;
+            if (Gdt.IsGdt(d.Kind))
+            {
+                // geometric tolerance: the zone width must not exceed the tolerance
+                t.Deviation = r.Value;
+                t.Status = r.Value <= d.TolPlus + eps ? TolStatus.Pass : TolStatus.Fail;
+                return t;
+            }
+            if (d.Kind == DimKind.Coordinate)
+            {
+                Vec3 p = partFrame.TransformPoint(r.A);
+                t.AxisDeviation = new Vec3(p.X - d.NX, p.Y - d.NY, p.Z - d.NZ);
+                var axes = new[] { t.AxisDeviation.X, t.AxisDeviation.Y, t.AxisDeviation.Z };
+                t.Deviation = axes.OrderByDescending(Math.Abs).First();
+                t.Status = axes.All(inside) ? TolStatus.Pass : TolStatus.Fail;
+                return t;
+            }
+            t.Deviation = r.Value - d.Nominal;
+            t.Status = inside(t.Deviation) ? TolStatus.Pass : TolStatus.Fail;
+            return t;
+        }
+
+        /// <summary>Half the tolerance band (the "±" a gauge has to resolve).</summary>
+        public static double HalfBand(Dimension d) { return Gdt.IsGdt(d.Kind) ? Math.Abs(d.TolPlus) / 2 : Math.Abs(d.TolPlus - d.TolMinus) / 2; }
     }
 
     /// <summary>Evaluated dimension (machine frame witness geometry; lengths in mm, angles in degrees).</summary>
@@ -62,6 +119,7 @@ namespace MicroScribe.Model
         /// <summary>How many entity picks a kind needs (angle: 2 directional entities, or 3 points).</summary>
         public static int PicksNeeded(DimKind k, Project p, List<EntityRef> picked)
         {
+            if (Gdt.IsGdt(k)) return Gdt.Picks(k);
             switch (k)
             {
                 case DimKind.Diameter:
@@ -89,6 +147,11 @@ namespace MicroScribe.Model
         public static DimResult Evaluate(Project p, Dimension d)
         {
             var r = new DimResult();
+            if (Gdt.IsGdt(d.Kind))
+            {
+                try { Gdt.Evaluate(p, d, r); } catch (Exception ex) { r.Ok = false; r.Error = ex.Message; }
+                return r;
+            }
             var g = new List<Primitive>();
             var names = new List<string>();
             foreach (var e in d.Refs)

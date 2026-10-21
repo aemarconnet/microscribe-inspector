@@ -230,7 +230,7 @@ namespace MicroScribe.App
         {
             var a = _s.LatestCheck("single-point");
             var b = _s.LatestCheck("length");
-            if (a == null && b == null) return "No arm check saved yet — run the single-point and length tests above to know what this arm can measure.";
+            if (a == null && b == null) return "Arm check: none saved yet — the arm's measuring error is unknown.";
             var parts = new List<string>();
             if (a != null) parts.Add(string.Format("single-point max {0} ({1:yyyy-MM-dd}, {2})", Ui.LU(a.MaxDeviation), a.Date, a.Pass ? "pass" : "FAIL"));
             if (b != null) parts.Add(string.Format("length error max {0} ({1:yyyy-MM-dd}, {2})", Ui.LU(b.MaxDeviation), b.Date, b.Pass ? "pass" : "FAIL"));

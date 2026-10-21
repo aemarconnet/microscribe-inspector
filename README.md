@@ -10,10 +10,10 @@ unzip anywhere and run `MicroScribeInspector.exe` (Windows 10/11, nothing to ins
 
 ![Measuring with click-to-measure dimensions](docs/images/measure.png)
 
-The original PC software for these arms is no longer supported. MicroScribe Inspector is an
-independent replacement: its serial driver is written from **public protocol documentation** and
-**observation of the device itself** (see [How it works](#how-it-works)), and it needs no vendor
-software at all.
+MicroScribe Inspector is an independent alternative for these older serial arms, made for owners who
+have found the original software difficult to run on modern operating systems. Its serial driver is
+written from **public protocol documentation** and **observation of the device itself** (see
+[How it works](#how-it-works)), so it runs on its own without any other software installed.
 
 > Not affiliated with, endorsed by or supported by the owner of the MicroScribe trademark.
 > See [LEGAL.md](LEGAL.md).
@@ -31,6 +31,8 @@ software at all.
 | Probes | Tip profiles with ball radius and offset, ball compensation for every feature type (including traced curves and freeform surfaces), pivot calibration for custom styli, qualification on a reference sphere. |
 | Arm check | Single-point articulation test in a cone seat and a length test on a known bar, with history, pass/fail against your limit and the resulting measuring capability in reports. |
 | Measure tools | Click features or single probed points in the 3D view: distance (with ΔX/ΔY/ΔZ and gaps), angle (features or three points), diameter, position. Results stay as labelled dimensions and go into the report. |
+| Tolerances | Nominal value and tolerance on any measurement, green/red pass/fail in the view, an out-of-tolerance summary in the report, and a warning when a tolerance is too tight for the arm. |
+| GD&T | Flatness, straightness, roundness, cylindricity (least squares or minimum zone), parallelism, perpendicularity, angularity, position and coaxiality, by clicking the feature and its datum. |
 | Planes | Resize by dragging handles or typing a size; extend or trim to another plane so faces meet for knitting. |
 | Alignment | 3-2-1 from features or principal axes, 90° turns, origin at a feature or at any bounding-box corner, face centre or centre (clickable handles). |
 | View | Work area: sketch the usable table area and a height once, and *Fit* always frames it. 3Dconnexion SpaceMouse navigation. mm / inch toggle. |

@@ -329,7 +329,10 @@ namespace MicroScribe.App
                 var r = DimensionSolver.Evaluate(_proj, d);
                 if (!r.Ok) continue;
                 bool sel = d.Id == _selectedDim;
-                Color col = sel ? Color.FromRgb(253, 224, 71) : Color.FromRgb(250, 204, 21);
+                var st = Tolerance.Evaluate(d, r, _proj.AlignmentMatrix).Status;
+                Color col = st == TolStatus.Pass ? (sel ? Color.FromRgb(74, 222, 128) : Color.FromRgb(34, 197, 94))
+                          : st == TolStatus.Fail ? (sel ? Color.FromRgb(248, 113, 113) : Color.FromRgb(239, 68, 68))
+                          : sel ? Color.FromRgb(253, 224, 71) : Color.FromRgb(250, 204, 21);
                 var mb = new MeshBuilder();
                 Vec3 a = M.TransformPoint(r.A), b = M.TransformPoint(r.B);
                 double t = _marker * (sel ? 0.35 : 0.22);
@@ -352,8 +355,10 @@ namespace MicroScribe.App
                     Vec3 p = M.TransformPoint(r.A);
                     text = "X " + Ui.L(p.X) + "  Y " + Ui.L(p.Y) + "  Z " + Ui.L(p.Z);
                 }
+                else if (Gdt.IsGdt(d.Kind)) { string n; text = Gdt.Symbol(d.Kind, DimensionSolver.Resolve(_proj, d.Refs[0], out n)) + " " + Ui.LU(r.Value); }
                 else if (r.IsAngle) text = r.Value.ToString("0.00", Ui.CI) + "°";
                 else text = (d.Kind == DimKind.Diameter ? "Ø " : "") + Ui.LU(r.Value);
+                if (st != TolStatus.None) text += st == TolStatus.Pass ? "  ✓" : "  ✗";
                 labels.Add(new Label3D
                 {
                     Position = M.TransformPoint(r.LabelAt), Text = text, Bold = true,

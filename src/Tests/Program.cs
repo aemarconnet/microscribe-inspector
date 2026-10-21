@@ -31,6 +31,7 @@ namespace MicroScribe.Tests
             ExportTests.Register();
             FreeformTests.Register();
             ProbeTests.Register();
+            InspectionTests.Register();
             foreach (var t in ExtraTests) Run(t.Key, t.Value);
             Console.WriteLine();
             Console.WriteLine("{0} passed, {1} failed", _pass, _fail);

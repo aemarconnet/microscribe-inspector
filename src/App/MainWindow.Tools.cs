@@ -17,7 +17,7 @@ using MicroScribe.Model;
 
 namespace MicroScribe.App
 {
-    public enum Tool { Select, Distance, Angle, Diameter, Coordinate, SketchArea, TraceArea, ProbeTable }
+    public enum Tool { Select, Distance, Angle, Diameter, Coordinate, SketchArea, TraceArea, ProbeTable, Form, Parallel, Perpendicular, Angularity, Position, Coaxial }
 
     public sealed partial class MainWindow
     {
@@ -99,8 +99,37 @@ namespace MicroScribe.App
                 case Tool.SketchArea: return string.Format("Work area — click points on the table to outline it ({0} so far). Click the first point, double-click or press Enter to close. Backspace = undo, Shift = no snap", _sketch.Count);
                 case Tool.TraceArea: return string.Format("Work area — touch the table along the outline and press pedal 1 / Space for each corner ({0} so far). Enter = done", _sketch.Count);
                 case Tool.ProbeTable: return string.Format("Table plane — touch the table in 3+ spread-out places, pedal 1 / Space each ({0} so far). Enter = done", _tablePts.Count);
+                case Tool.Form: return "Form — click a plane (flatness), line (straightness), circle (roundness), cylinder (cylindricity), cone or sphere";
+                case Tool.Position: return "Position — click a hole, pin, circle, sphere or point; then enter its nominal position (part frame)";
+                case Tool.Parallel:
+                case Tool.Perpendicular:
+                case Tool.Angularity:
+                case Tool.Coaxial:
+                    {
+                        string n = _tool == Tool.Parallel ? "Parallelism" : _tool == Tool.Perpendicular ? "Perpendicularity" : _tool == Tool.Angularity ? "Angularity" : "Coaxiality";
+                        string what = _tool == Tool.Coaxial ? "axis (cylinder, cone, line or circle)" : "plane or axis";
+                        return _picks.Count == 0 ? n + " — click the toleranced " + what : n + " — click the datum " + what + "  (for " + DimensionSolver.RefName(_proj, _picks[0]) + ")";
+                    }
             }
             return null;
+        }
+
+        /// <summary>The measurement a click tool makes.</summary>
+        static DimKind ToolKind(Tool t)
+        {
+            switch (t)
+            {
+                case Tool.Angle: return DimKind.Angle;
+                case Tool.Diameter: return DimKind.Diameter;
+                case Tool.Coordinate: return DimKind.Coordinate;
+                case Tool.Form: return DimKind.Form;
+                case Tool.Parallel: return DimKind.Parallelism;
+                case Tool.Perpendicular: return DimKind.Perpendicularity;
+                case Tool.Angularity: return DimKind.Angularity;
+                case Tool.Position: return DimKind.Position;
+                case Tool.Coaxial: return DimKind.Coaxiality;
+            }
+            return DimKind.Distance;
         }
 
         // ------------------------------------------------------------------ picking
@@ -145,11 +174,11 @@ namespace MicroScribe.App
 
         void PickEntity(EntityRef e)
         {
-            DimKind kind = _tool == Tool.Angle ? DimKind.Angle : _tool == Tool.Diameter ? DimKind.Diameter : _tool == Tool.Coordinate ? DimKind.Coordinate : DimKind.Distance;
+            DimKind kind = ToolKind(_tool);
             // features with no geometry (curves being traced) can only provide points
             var f = _proj.Find(e.FeatureId);
             if (e.PointIndex < 0 && (f == null || f.Geometry == null)) { Status("That feature has no solved geometry yet"); return; }
-            if (kind == DimKind.Diameter && e.PointIndex >= 0) e.PointIndex = -1;
+            if ((kind == DimKind.Diameter || Gdt.IsGdt(kind)) && e.PointIndex >= 0) e.PointIndex = -1;
             _picks.Add(e);
             string n;
             var g = DimensionSolver.Resolve(_proj, e, out n);
@@ -158,12 +187,13 @@ namespace MicroScribe.App
             if (_picks.Count >= need)
             {
                 var d = new Dimension { Id = _proj.NextDimId++, Kind = kind, Refs = _picks.ToList() };
+                InitNominal(d);
                 var r = DimensionSolver.Evaluate(_proj, d);
                 _picks.Clear(); _pickMarks.Clear();
                 if (!r.Ok) { Status("Can't measure that: " + r.Error); Sounds.Warn(); }
                 else
                 {
-                    d.Name = kind + " " + d.Id;
+                    d.Name = (Gdt.IsGdt(kind) ? Gdt.Name(kind, DimensionSolver.Resolve(_proj, d.Refs[0], out n)) : kind.ToString()) + " " + d.Id;
                     _proj.Dimensions.Add(d);
                     _selectedDim = d.Id;
                     _dirty = true;
@@ -176,6 +206,25 @@ namespace MicroScribe.App
             }
             UpdatePrompt();
             RebuildToolLayer();
+        }
+
+        /// <summary>Position and angularity need a nominal to be evaluated: start from the measured value, rounded.</summary>
+        void InitNominal(Dimension d)
+        {
+            if (d.Kind == DimKind.Position)
+            {
+                string n;
+                var g = DimensionSolver.Resolve(_proj, d.Refs[0], out n);
+                if (g == null) return;
+                Vec3 k = _proj.AlignmentMatrix.TransformPoint(Constructions.KeyPoint(g));
+                d.NX = Math.Round(k.X, 1); d.NY = Math.Round(k.Y, 1); d.NZ = Math.Round(k.Z, 1);
+            }
+            else if (d.Kind == DimKind.Angularity)
+            {
+                d.Nominal = 45;
+                var r = DimensionSolver.Evaluate(_proj, d);
+                if (r.Ok) d.Nominal = Math.Round(r.Extra.First(x => x.Key.StartsWith("Angle")).Value * 2) / 2;
+            }
         }
 
         string DimText(Dimension d, DimResult r)

@@ -141,6 +141,34 @@ namespace MicroScribe.App
             });
             steps.Add(() => shot("05-measurements"));
 
+            // nominal values and tolerances: one in, one out
+            steps.Add(() =>
+            {
+                var d1 = _proj.Dimensions[0]; d1.Toleranced = true; d1.Nominal = 35; d1.TolPlus = 0.05; d1.TolMinus = -0.05;
+                var d2 = _proj.Dimensions[1]; d2.Toleranced = true; d2.Nominal = 20; d2.TolPlus = 0.005; d2.TolMinus = -0.005;
+                _selectedDim = d2.Id;
+                RebuildMeasurePanel(); RebuildDims();
+                foreach (var d in new[] { d1, d2 }) check(d.Name + ": " + CadExport.ToleranceLine(_proj, d, DimensionSolver.Evaluate(_proj, d), Fmt));
+            });
+            steps.Add(() => shot("05b-tolerances"));
+
+            // geometric tolerances by clicking feature (and datum)
+            steps.Add(() =>
+            {
+                SetTool(Tool.Form); PickEntity(new EntityRef { FeatureId = F("Top 1").Id });
+                SetTool(Tool.Perpendicular); PickEntity(new EntityRef { FeatureId = F("Front").Id }); PickEntity(new EntityRef { FeatureId = F("Top 1").Id });
+                SetTool(Tool.Perpendicular); PickEntity(new EntityRef { FeatureId = F("Bore").Id }); PickEntity(new EntityRef { FeatureId = F("Top 1").Id });
+                SetTool(Tool.Position); PickEntity(new EntityRef { FeatureId = F("Bore").Id });
+                SetTool(Tool.Coaxial); PickEntity(new EntityRef { FeatureId = F("Boss").Id }); PickEntity(new EntityRef { FeatureId = F("Bore").Id });
+                SetTool(Tool.Select);
+                var flat = _proj.Dimensions.First(x => x.Kind == DimKind.Form);
+                flat.Toleranced = true; flat.TolPlus = 0.05; flat.MinZone = true;
+                _selectedDim = flat.Id;
+                RebuildMeasurePanel(); RebuildDims();
+                foreach (var d in _proj.Dimensions.Where(x => Gdt.IsGdt(x.Kind))) check(DimText(d, DimensionSolver.Evaluate(_proj, d)));
+            });
+            steps.Add(() => shot("05c-gdt"));
+
             // freeform surface + curve modes
             steps.Add(() => { _tabs.SelectedIndex = 0; SelectFeature(F("Freeform")); FitFeatures(); });
             steps.Add(() => shot("06-freeform"));

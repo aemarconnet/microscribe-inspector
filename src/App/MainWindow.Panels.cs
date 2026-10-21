@@ -36,6 +36,90 @@ namespace MicroScribe.App
         UnitFmt Fmt { get { return new UnitFmt(Ui.Inch); } }
 
         static TextBlock Lbl(string t) { return new TextBlock { Text = t, Width = 130, VerticalAlignment = VerticalAlignment.Center }; }
+        static TextBlock Short(string t) { return new TextBlock { Text = t, Width = 92, VerticalAlignment = VerticalAlignment.Center }; }
+
+        static readonly Brush PassBrush = Ui.Frozen(Color.FromRgb(22, 163, 74)), FailBrush = Ui.Frozen(Color.FromRgb(220, 38, 38));
+
+        TolStatus TolStatusOf(Dimension d) { return Tolerance.Evaluate(d, DimensionSolver.Evaluate(_proj, d), _proj.AlignmentMatrix).Status; }
+
+        /// <summary>Nominal / tolerance editor shown under the selected measurement.</summary>
+        UIElement ToleranceEditor(Dimension d, Action refresh)
+        {
+            var sp = new StackPanel { Margin = new Thickness(0, 4, 0, 4) };
+            var r = DimensionSolver.Evaluate(_proj, d);
+            if (!r.Ok) return sp;
+            bool ang = r.IsAngle;
+            Action changed = () => { _dirty = true; refresh(); RebuildDims(); };
+            if (Gdt.IsGdt(d.Kind)) { GdtEditor(sp, d, changed); return sp; }
+            Action fromMeasured = () =>
+            {
+                if (d.Kind == DimKind.Coordinate)
+                {
+                    Vec3 q = _proj.AlignmentMatrix.TransformPoint(r.A);
+                    d.NX = Math.Round(q.X, 3); d.NY = Math.Round(q.Y, 3); d.NZ = Math.Round(q.Z, 3);
+                }
+                else d.Nominal = Math.Round(r.Value, 3);
+            };
+            var on = new CheckBox { Content = "Nominal value and tolerance", IsChecked = d.Toleranced, Margin = new Thickness(0, 2, 0, 2) };
+            on.Click += (s, e) =>
+            {
+                d.Toleranced = on.IsChecked == true;
+                if (d.Toleranced && d.Nominal == 0 && d.NX == 0 && d.NY == 0 && d.NZ == 0) { fromMeasured(); d.TolPlus = 0.5; d.TolMinus = -0.5; }
+                _dirty = true; RebuildMeasurePanel(); RebuildDims();
+            };
+            sp.Children.Add(on);
+            if (!d.Toleranced) return sp;
+            Func<double, Action<double>, double, TextBox> box = (v, set, w) =>
+                ang ? Ui.NumBox(v, x => { set(x); changed(); }, w) : Ui.LenBox(v, x => { set(x); changed(); }, w);
+            Func<UIElement> unit = () => ang ? (UIElement)Ui.Text(" °", 12, null, Ui.Muted) : Ui.UnitLabel();
+            if (d.Kind == DimKind.Coordinate)
+                sp.Children.Add(Ui.Row(Short("Nominal XYZ"), box(d.NX, x => d.NX = x, 58), box(d.NY, x => d.NY = x, 58), box(d.NZ, x => d.NZ = x, 58), unit()));
+            else sp.Children.Add(Ui.Row(Short("Nominal"), box(d.Nominal, x => d.Nominal = x, 80), unit()));
+            sp.Children.Add(Ui.Row(Short("Tolerance + / −"), box(d.TolPlus, x => d.TolPlus = Math.Abs(x), 62),
+                box(-d.TolMinus, x => d.TolMinus = -Math.Abs(x), 62), unit()));
+            sp.Children.Add(Ui.Row(Ui.Btn("Measured → nominal", () => { fromMeasured(); _dirty = true; RebuildMeasurePanel(); RebuildDims(); })));
+            if (!ang)
+            {
+                double hb = Tolerance.HalfBand(d), err = _s.MeasuringError;
+                if (ToleranceTooTight(hb))
+                    sp.Children.Add(Ui.Text(string.Format("⚠ ±{0} is tighter than 4× the arm's measuring error (±{1}) — a pass/fail here is not reliable.",
+                        Ui.LU(hb), Ui.LU(err)), 11, null, Brushes.DarkOrange));
+                else if (double.IsNaN(err))
+                    sp.Children.Add(Ui.Text("Run an arm check (Arm & tip tab) to see whether this tolerance can be judged reliably.", 11, null, Ui.Muted));
+            }
+            return sp;
+        }
+
+        /// <summary>Geometric tolerance: nominal angle / position where needed, and the tolerance zone.</summary>
+        void GdtEditor(StackPanel sp, Dimension d, Action changed)
+        {
+            if (d.Kind == DimKind.Angularity)
+                sp.Children.Add(Ui.Row(Short("Nominal angle"), Ui.NumBox(d.Nominal, x => { d.Nominal = x; changed(); }, 80), Ui.Text(" °", 12, null, Ui.Muted)));
+            if (d.Kind == DimKind.Position)
+                sp.Children.Add(Ui.Row(Short("Nominal XYZ"), Ui.LenBox(d.NX, x => { d.NX = x; changed(); }, 58), Ui.LenBox(d.NY, x => { d.NY = x; changed(); }, 58),
+                    Ui.LenBox(d.NZ, x => { d.NZ = x; changed(); }, 58), Ui.UnitLabel()));
+            if (d.Kind == DimKind.Form)
+            {
+                var mz = new CheckBox { Content = "Minimum zone (narrowest zone instead of least squares)", IsChecked = d.MinZone, Margin = new Thickness(0, 2, 0, 2) };
+                mz.Click += (s, e) => { d.MinZone = mz.IsChecked == true; changed(); };
+                sp.Children.Add(mz);
+            }
+            var on = new CheckBox { Content = "Tolerance zone", IsChecked = d.Toleranced, Margin = new Thickness(0, 2, 0, 2) };
+            on.Click += (s, e) =>
+            {
+                d.Toleranced = on.IsChecked == true;
+                if (d.Toleranced && d.TolPlus <= 0.1 + 1e-9) d.TolPlus = 0.5;
+                _dirty = true; RebuildMeasurePanel(); RebuildDims();
+            };
+            sp.Children.Add(on);
+            if (!d.Toleranced) return;
+            string z = d.Kind == DimKind.Position || d.Kind == DimKind.Coaxiality ? "Ø zone" : "Zone width";
+            sp.Children.Add(Ui.Row(Short(z), Ui.LenBox(d.TolPlus, x => { d.TolPlus = Math.Abs(x); changed(); }, 80), Ui.UnitLabel()));
+            double hb = Tolerance.HalfBand(d);
+            if (ToleranceTooTight(hb))
+                sp.Children.Add(Ui.Text(string.Format("⚠ A {0} zone is tighter than 4× the arm's measuring error (±{1}) — a pass/fail here is not reliable.",
+                    Ui.LU(d.TolPlus), Ui.LU(_s.MeasuringError)), 11, null, Brushes.DarkOrange));
+        }
 
         /// <summary>How the ball radius was applied, in words.</summary>
         static string CompensationNote(Feature f)
@@ -363,6 +447,16 @@ namespace MicroScribe.App
             tb(Tool.Coordinate, "XYZ Position (X)", "Coordinates of a point, centre or feature");
             tools.Children.Add(tw);
             tools.Children.Add(Ui.Text("Click entities in the 3D view — the geometry picks the feature, a point marker picks that probed point — or click features in the list. Results are kept below and drawn in the view.", 11, null, Ui.Muted));
+            tools.Children.Add(Ui.Header("GEOMETRIC TOLERANCES"));
+            tw = new WrapPanel();
+            tb(Tool.Form, "Form", "Flatness, straightness, roundness or cylindricity of one feature");
+            tb(Tool.Parallel, "∥ Parallel", "Parallelism of a plane or axis to a datum plane or axis");
+            tb(Tool.Perpendicular, "⊥ Perpendicular", "Perpendicularity of a plane or axis to a datum plane or axis");
+            tb(Tool.Angularity, "∠ Angularity", "Angularity of a plane or axis to a datum, at a nominal angle");
+            tb(Tool.Position, "⌖ Position", "Position of a hole, pin or point against its nominal (part frame)");
+            tb(Tool.Coaxial, "◎ Coaxial", "Coaxiality of an axis to a datum axis");
+            tools.Children.Add(tw);
+            tools.Children.Add(Ui.Text("Values are tolerance-zone widths from the least-squares fit of the compensated points. The part coordinate system (Alignment tab) is the datum reference frame for Position.", 11, null, Ui.Muted));
             p.Children.Add(Ui.Card(tools));
 
             // dimension list
@@ -380,19 +474,45 @@ namespace MicroScribe.App
             }
             hdr.Children.Add(Ui.Header("MEASUREMENTS (" + _proj.Dimensions.Count + ")"));
             dl.Children.Add(hdr);
+            var summary = Ui.Text("", 11.5, FontWeights.SemiBold);
+            Action updateSummary = () =>
+            {
+                var st = _proj.Dimensions.Select(TolStatusOf).Where(s => s != TolStatus.None).ToList();
+                int fail = st.Count(s => s == TolStatus.Fail);
+                summary.Text = st.Count == 0 ? "" : fail == 0 ? string.Format("✓ All {0} toleranced measurements in tolerance", st.Count)
+                    : string.Format("✗ {0} of {1} toleranced measurements OUT of tolerance", fail, st.Count);
+                summary.Foreground = fail == 0 ? PassBrush : FailBrush;
+                summary.Visibility = st.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+            };
+            updateSummary();
+            dl.Children.Add(summary);
             if (_proj.Dimensions.Count == 0) dl.Children.Add(Ui.Text("None yet — use the tools above.", 11.5, null, Ui.Muted));
+            else dl.Children.Add(Ui.Text("Click a measurement to give it a nominal value and tolerance.", 11, null, Ui.Muted));
             Mat4 M = DisplayMatrix;
             foreach (var d in _proj.Dimensions.ToList())
             {
                 var dd = d;
-                var lines = CadExport.DescribeDimension(_proj, d, M, Fmt).ToList();
                 var row = new DockPanel { Margin = new Thickness(0, 3, 0, 3), Background = d.Id == _selectedDim ? Ui.Frozen(Color.FromRgb(254, 249, 195)) : Brushes.Transparent };
                 var del = Ui.Btn("✕", () => DeleteDimension(dd.Id), "Delete this measurement");
                 DockPanel.SetDock(del, Dock.Right);
                 row.Children.Add(del);
-                var txt = new TextBlock { FontFamily = Ui.Mono, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Text = string.Join("\n", lines) };
+                var bar = new Border { Width = 4, Margin = new Thickness(0, 0, 6, 0), CornerRadius = new CornerRadius(2) };
+                DockPanel.SetDock(bar, Dock.Left);
+                row.Children.Add(bar);
+                var body = new StackPanel();
+                var txt = new TextBlock { FontFamily = Ui.Mono, FontSize = 11.5, TextWrapping = TextWrapping.Wrap };
+                Action refresh = () =>
+                {
+                    txt.Text = string.Join("\n", CadExport.DescribeDimension(_proj, dd, M, Fmt));
+                    var st = TolStatusOf(dd);
+                    bar.Background = st == TolStatus.Pass ? PassBrush : st == TolStatus.Fail ? FailBrush : Brushes.Transparent;
+                    updateSummary();
+                };
+                refresh();
                 txt.MouseLeftButtonDown += (s, e) => { _selectedDim = dd.Id; RebuildMeasurePanel(); RebuildDims(); };
-                row.Children.Add(txt);
+                body.Children.Add(txt);
+                if (dd.Id == _selectedDim) body.Children.Add(ToleranceEditor(dd, refresh));
+                row.Children.Add(body);
                 dl.Children.Add(row);
             }
             p.Children.Add(Ui.Card(dl));

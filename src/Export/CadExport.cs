@@ -240,10 +240,39 @@ namespace MicroScribe.Export
             {
                 sb.AppendLine(new string('-', 78));
                 sb.AppendLine("MEASUREMENTS");
+                var checks = proj.Dimensions.Select(d => new { d, t = Tolerance.Evaluate(d, DimensionSolver.Evaluate(proj, d), proj.AlignmentMatrix) })
+                    .Where(x => x.t.Status != TolStatus.None).ToList();
+                if (checks.Count > 0)
+                {
+                    int fail = checks.Count(x => x.t.Status == TolStatus.Fail);
+                    sb.AppendLine(string.Format("  Tolerance check: {0} of {1} in tolerance{2}", checks.Count - fail, checks.Count, fail > 0 ? " — OUT OF TOLERANCE: " +
+                        string.Join(", ", checks.Where(x => x.t.Status == TolStatus.Fail).Select(x => x.d.Name)) : ""));
+                    sb.AppendLine();
+                }
                 foreach (var d in proj.Dimensions)
                     foreach (var line in DescribeDimension(proj, d, m, u)) sb.AppendLine("  " + line);
             }
             return sb.ToString();
+        }
+
+        /// <summary>"Nominal … tolerance … deviation … PASS/FAIL", or null when the dimension has no tolerance.</summary>
+        public static string ToleranceLine(Project proj, Dimension d, DimResult r, UnitFmt u)
+        {
+            var t = Tolerance.Evaluate(d, r, proj.AlignmentMatrix);
+            if (t.Status == TolStatus.None) return null;
+            Func<double, string> V = x => t.IsAngle ? x.ToString("0.000", CI) + "°" : u.L(x);
+            Func<double, string> S = x => (x >= 0 ? "+" : "−") + V(Math.Abs(x));
+            string band = Math.Abs(d.TolPlus + d.TolMinus) < 1e-12 ? "±" + V(d.TolPlus) : S(d.TolPlus) + "/−" + V(-d.TolMinus);
+            string verdict = t.Status == TolStatus.Pass ? "PASS" : "FAIL";
+            if (Gdt.IsGdt(d.Kind))
+            {
+                string z = d.Kind == DimKind.Position || d.Kind == DimKind.Coaxiality ? "Ø" : "";
+                return string.Format("Tolerance {0}{1}   Actual {0}{2}  {3}", z, u.L(d.TolPlus), u.L(t.Deviation), verdict);
+            }
+            if (d.Kind == DimKind.Coordinate)
+                return string.Format("Nominal X {0} Y {1} Z {2}  {3}   Dev X {4} Y {5} Z {6}  {7}", u.L(d.NX), u.L(d.NY), u.L(d.NZ), band,
+                    S(t.AxisDeviation.X), S(t.AxisDeviation.Y), S(t.AxisDeviation.Z), verdict);
+            return string.Format("Nominal {0}  {1}   Dev {2}  {3}", V(d.Nominal), band, S(t.Deviation), verdict);
         }
 
         public static IEnumerable<string> DescribeDimension(Project proj, Dimension d, Mat4 m, UnitFmt u)
@@ -251,13 +280,16 @@ namespace MicroScribe.Export
             var r = DimensionSolver.Evaluate(proj, d);
             var lines = new List<string>();
             if (!r.Ok) { lines.Add((d.Name ?? d.Kind.ToString()) + ": " + r.Error); return lines; }
+            string tol = ToleranceLine(proj, d, r, u);
             if (d.Kind == DimKind.Coordinate)
             {
                 Vec3 p = m.TransformPoint(r.A);
                 lines.Add(r.Title + ":  X " + u.L(p.X) + "  Y " + u.L(p.Y) + "  Z " + u.L(p.Z) + " " + u.U);
+                if (tol != null) lines.Add("    " + tol);
                 return lines;
             }
             lines.Add(r.Title + ":  " + (r.IsAngle ? r.Value.ToString("0.0000", CI) + "°" : u.L(r.Value) + " " + u.U));
+            if (tol != null) lines.Add("    " + tol);
             if (d.Kind == DimKind.Distance)
             {
                 Vec3 dv = m.TransformVector(r.B - r.A);
@@ -267,7 +299,7 @@ namespace MicroScribe.Export
             {
                 string[] parts = e.Key.Split('|');
                 if (parts.Length < 2) continue;
-                lines.Add("    " + parts[0] + ": " + (parts[1] == "A" ? e.Value.ToString("0.0000", CI) + "°" : u.L(e.Value) + " " + u.U));
+                lines.Add("    " + parts[0] + ": " + (parts[1] == "A" ? e.Value.ToString("0.0000", CI) + "°" : parts[1] == "N" ? e.Value.ToString("0", CI) : u.L(e.Value) + " " + u.U));
             }
             return lines;
         }

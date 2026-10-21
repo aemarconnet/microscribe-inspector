@@ -26,13 +26,14 @@ Effort: **S** small · **M** medium · **L** large.
 
 ## Phase 2 — Inspection against nominal values
 
-6. [ ] **Nominal values and tolerances** on features and dimensions, pass/fail colours and an
-   out-of-tolerance list (M).
-7. [ ] **Basic GD&T** (M–L) — flatness, straightness, roundness, cylindricity, parallelism,
-   perpendicularity, angularity, position, coaxiality, profile; datum reference frames from the
-   alignment features; optional minimum-zone fit next to least squares.
+6. [x] **Nominal values and tolerances** on measurements, pass/fail colours and an
+   out-of-tolerance summary (M).
+7. [x] **Basic GD&T** (M–L) — flatness, straightness, roundness, cylindricity, parallelism,
+   perpendicularity, angularity, position, coaxiality; the part coordinate system as the datum
+   reference frame; optional minimum-zone evaluation next to least squares.
 8. [ ] **Nominal model import** (L) — STL first: display, best-fit and 3-2-1 alignment to the model,
-   live stylus-to-model deviation, deviation colour map, comparison points. STEP import later.
+   live stylus-to-model deviation, deviation colour map, comparison points, profile of a surface.
+   STEP import later.
 9. [ ] **Report with pictures** (M) — HTML/PDF with 3D snapshots, tables, pass/fail, logo and part,
    serial and operator fields; CSV of results per part.
 10. [ ] **Inspection plans: learn and replay** (L) — record the feature sequence with nominals,
