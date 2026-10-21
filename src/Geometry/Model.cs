@@ -50,6 +50,12 @@ namespace MicroScribe.Model
         public int ProjectionPlaneId;
         /// <summary>For cylinders/cones: force a full 360° surface on export.</summary>
         public bool FullRevolution;
+        /// <summary>Constrained fit: fixed diameter (circle, cylinder, sphere) or included cone angle (degrees).</summary>
+        public bool FixSize;
+        public double FixedSize;
+        /// <summary>Constrained fit: "parallel" / "perpendicular" to the datum feature (plane, line, cylinder, cone), or "".</summary>
+        public string DirectionRelation = "";
+        public int DirectionDatumId;
         /// <summary>For constructions: ids of the source features and the operation.</summary>
         public List<int> SourceIds = new List<int>();
         public string Construction;
@@ -203,6 +209,7 @@ namespace MicroScribe.Model
             try
             {
                 Primitive raw = f.Kind == FeatureKind.Plane ? Fitter.FitPlane(p, d) : Fitter.Fit(f.Kind, p, d, proj2);
+                raw = ConstrainedFit.Apply(proj, f, raw, p, pts);
                 f.RawFit = raw;
                 if (raw == null) { f.Geometry = null; f.FitError = "Fit failed"; return; }
                 double r = pts.Average(q => q.ProbeRadius);
@@ -586,6 +593,8 @@ namespace MicroScribe.Model
             Func<Feature, bool> projected = x => x.Kind == FeatureKind.Circle || ProfileFit.IsProfile(x.Kind);
             foreach (var f in proj.Features.Where(x => x.Origin == FeatureOrigin.Measured && !projected(x))) Solve(proj, f);
             foreach (var f in proj.Features.Where(x => x.Origin == FeatureOrigin.Measured && projected(x))) Solve(proj, f);
+            // features constrained to a datum: again, now that every datum is solved
+            foreach (var f in proj.Features.Where(x => x.Origin == FeatureOrigin.Measured && x.DirectionDatumId != 0 && !string.IsNullOrEmpty(x.DirectionRelation))) Solve(proj, f);
             foreach (var f in proj.Features.Where(x => x.Origin == FeatureOrigin.Constructed)) Solve(proj, f);
             AlignmentSolver.Apply(proj);
         }

@@ -27,7 +27,7 @@ written from **public protocol documentation** and **observation of the device i
 | Feedback | A cheerful chime when a point fits, an arpeggio when a feature finishes cleanly, a low tone when a point is off the fit. |
 | Curves | Smoothed spline (within a tolerance) or linear polyline; open or closed. A traced profile becomes a 2D sketch of lines and arcs (sharp corners, tangent arcs) exported as DXF, and any curve can be saved as a SolidWorks XYZ curve file. |
 | Freeform | Traced curves are skinned into a B-spline surface and exported as a STEP B-spline face. |
-| Fitting | Orthogonal least squares (Levenberg–Marquardt), robust axis search for cylinders and cones, form error and RMS, warnings for badly distributed points. |
+| Fitting | Orthogonal least squares (Levenberg–Marquardt), robust axis search for cylinders and cones, form error and RMS, warnings for badly distributed points. Optional constraints: fixed diameter or cone angle, direction parallel or perpendicular to a datum. |
 | Probes | Tip profiles with ball radius and offset, ball compensation for every feature type (including traced curves and freeform surfaces), pivot calibration for custom styli, qualification on a reference sphere. |
 | Arm check | Single-point articulation test in a cone seat and a length test on a known bar, with history, pass/fail against your limit and the resulting measuring capability in reports. |
 | Measure tools | Click features or single probed points in the 3D view: distance (with ΔX/ΔY/ΔZ and gaps), angle (features or three points), diameter, position. Results stay as labelled dimensions and go into the report. |

@@ -121,6 +121,43 @@ namespace MicroScribe.App
                     Ui.LU(d.TolPlus), Ui.LU(_s.MeasuringError)), 11, null, Brushes.DarkOrange));
         }
 
+        /// <summary>Fixed size and fixed direction for the fit.</summary>
+        UIElement ConstraintCard(Feature f)
+        {
+            var sp = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
+            if (ConstrainedFit.CanFixSize(f.Kind))
+            {
+                bool cone = f.Kind == FeatureKind.Cone;
+                var fx = new CheckBox { Content = cone ? "Fixed included angle" : "Fixed diameter", IsChecked = f.FixSize, VerticalAlignment = VerticalAlignment.Center, Width = 130 };
+                fx.Click += (s, e) =>
+                {
+                    f.FixSize = fx.IsChecked == true;
+                    if (f.FixSize && f.FixedSize <= 0 && f.Geometry != null)
+                    {
+                        var g = f.Geometry;
+                        f.FixedSize = cone ? Math.Round(2 * Math.Abs(((ConePrim)g).HalfAngle) * 180 / Math.PI, 1)
+                            : Math.Round(2 * (g is CirclePrim ? ((CirclePrim)g).Radius : g is SpherePrim ? ((SpherePrim)g).Radius : ((CylinderPrim)g).Radius), 2);
+                    }
+                    Changed();
+                };
+                sp.Children.Add(Ui.Row(fx, cone ? (UIElement)Ui.NumBox(f.FixedSize, v => { f.FixedSize = Math.Max(0.01, v); Changed(); }, 80) : Ui.LenBox(f.FixedSize, v => { f.FixedSize = Math.Max(0.001, v); Changed(); }, 80),
+                    cone ? (UIElement)Ui.Text(" °", 12, null, Ui.Muted) : Ui.UnitLabel()));
+            }
+            if (ConstrainedFit.CanFixDirection(f.Kind))
+            {
+                var rel = new ComboBox { Width = 130 };
+                rel.Items.Add("Free direction"); rel.Items.Add("Parallel to"); rel.Items.Add("Perpendicular to");
+                rel.SelectedIndex = f.DirectionRelation == "parallel" ? 1 : f.DirectionRelation == "perpendicular" ? 2 : 0;
+                rel.SelectionChanged += (s, e) => { f.DirectionRelation = rel.SelectedIndex == 1 ? "parallel" : rel.SelectedIndex == 2 ? "perpendicular" : ""; Changed(); };
+                Func<Feature, bool> datum = x => x != f && x.Geometry != null && (x.Geometry is PlanePrim || x.Geometry is LinePrim || x.Geometry is CylinderPrim || x.Geometry is ConePrim);
+                sp.Children.Add(Ui.Row(rel, FeatureCombo(f.DirectionDatumId, id => { f.DirectionDatumId = id; Changed(); }, datum, "(datum)")));
+                if (f.Kind == FeatureKind.Cone && f.DirectionRelation == "perpendicular") sp.Children.Add(Ui.Text("Cones: only an axis along the datum is supported.", 11, null, Brushes.DarkOrange));
+            }
+            sp.Children.Add(Ui.Text("Use when the part is known to have this size or direction (a dowel hole, a face square to the base). If the constraint does not suit the part, the residuals grow — check the form value.", 11, null, Ui.Muted));
+            bool active = (f.FixSize && f.FixedSize > 0) || !string.IsNullOrEmpty(f.DirectionRelation);
+            return new Expander { Header = active ? "Fit constraints (active)" : "Fit constraints", IsExpanded = active, Content = sp, FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal };
+        }
+
         /// <summary>How the ball radius was applied, in words.</summary>
         static string CompensationNote(Feature f)
         {
@@ -187,6 +224,9 @@ namespace MicroScribe.App
             if (f.Kind == FeatureKind.Plane && f.Geometry is PlanePrim) p.Children.Add(Ui.Card(PlaneSizeCard(f)));
             if (f.Kind == FeatureKind.Curve) { p.Children.Add(Ui.Card(CurveCard(f))); p.Children.Add(Ui.Card(SketchCard(f))); }
             if (f.Kind == FeatureKind.Surface) p.Children.Add(Ui.Card(SurfaceCard(f)));
+
+            if (f.Origin == FeatureOrigin.Measured && (ConstrainedFit.CanFixSize(f.Kind) || ConstrainedFit.CanFixDirection(f.Kind)))
+                p.Children.Add(Ui.Card(ConstraintCard(f)));
 
             // options
             var opt = new StackPanel();

@@ -20,6 +20,68 @@ namespace MicroScribe.Tests
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("HTML report and results log", TestReport));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("inspection plan runs and SPC", TestPlanSpc));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("constructions: offset, mid-plane, projection, mirror, bolt circle", TestConstructions));
+            Program.ExtraTests.Add(new KeyValuePair<string, Action>("constrained fits: fixed size, parallel, perpendicular", TestConstrained));
+        }
+
+        static void TestConstrained()
+        {
+            var p = new Project();
+            var datum = Plane(p, 0);
+            FeatureSolver.Solve(p, datum);
+            // a wall leaning 0.04 over 20 mm, forced square to the base
+            var wall = Pts(p, FeatureKind.Plane, new[] { 0.0, 30 }.SelectMany(y => new[] { 0.0, 10, 20 }.Select(z => new Vec3(0.002 * z, y, z))), q => Vec3.UnitX);
+            Check(Math.Abs(((PlanePrim)wall.Geometry).Normal.Z) > 1e-3, "free wall leans");
+            wall.DirectionRelation = "perpendicular"; wall.DirectionDatumId = datum.Id;
+            FeatureSolver.Solve(p, wall);
+            var wn = ((PlanePrim)wall.Geometry).Normal;
+            Check(Math.Abs(wn.Z) < 1e-12 && Math.Abs(wn.X) > 0.999, "wall forced perpendicular ({0})", wn);
+            Check(wall.Geometry.Stats.Form > 0.03, "the lean shows up as form ({0})", wall.Geometry.Stats.Form);
+            // a top face forced parallel to the base
+            var top = Pts(p, FeatureKind.Plane, new[] { new Vec3(0, 0, 10), new Vec3(40, 0, 10.04), new Vec3(40, 30, 10.04), new Vec3(0, 30, 10), new Vec3(20, 15, 10.02) });
+            top.DirectionRelation = "parallel"; top.DirectionDatumId = datum.Id;
+            FeatureSolver.Solve(p, top);
+            Check((((PlanePrim)top.Geometry).Normal - Vec3.UnitZ).Length < 1e-12, "top forced parallel");
+            // a pin tilted 0.001 rad, forced perpendicular to the base: axis exactly along Z
+            var pin = Pts(p, FeatureKind.Cylinder, Cylinder(new Vec3(60, 60, 0), new Vec3(0.001, 0, 1), 5, 20), q => (new Vec3(60, 60, q.Z) - q).Normalized());
+            pin.DirectionRelation = "perpendicular"; pin.DirectionDatumId = datum.Id;
+            FeatureSolver.Solve(p, pin);
+            var pc = (CylinderPrim)pin.Geometry;
+            Check(Math.Abs(Math.Abs(pc.Axis.Z) - 1) < 1e-12 && Math.Abs(pc.Radius - 5) < 0.01, "pin axis {0}, R {1}", pc.Axis, pc.Radius);
+            // fixed diameter
+            pin.DirectionRelation = ""; pin.FixSize = true; pin.FixedSize = 10.1;
+            FeatureSolver.Solve(p, pin);
+            Check(Math.Abs(((CylinderPrim)pin.Geometry).Radius - 5.05) < 1e-12 && Math.Abs(pin.Geometry.Stats.Rms - 0.05) < 0.005, "fixed diameter, rms {0}", pin.Geometry.Stats.Rms);
+            // a cross hole along X, tilted 0.01 rad toward Z, forced perpendicular to a vertical datum axis
+            var shaft = Pts(p, FeatureKind.Cylinder, Cylinder(new Vec3(0, 0, 0), Vec3.UnitZ, 8, 30), q => (new Vec3(0, 0, q.Z) - q).Normalized());
+            Vec3 xa = new Vec3(1, 0, 0.01).Normalized();
+            var cross = Pts(p, FeatureKind.Cylinder, Cylinder(new Vec3(-15, 0, 15), xa, 3, 30), q => { Vec3 w = q - new Vec3(-15, 0, 15); return -(w - xa * w.Dot(xa)).Normalized(); });
+            cross.DirectionRelation = "perpendicular"; cross.DirectionDatumId = shaft.Id;
+            FeatureSolver.Solve(p, cross);
+            var cc = (CylinderPrim)cross.Geometry;
+            Check(Math.Abs(cc.Axis.Z) < 1e-9 && Math.Abs(Math.Abs(cc.Axis.X) - 1) < 1e-4, "cross hole axis {0}", cc.Axis);
+            // a 90° countersink measured as 89°: fixed angle gives 45° exactly
+            var cs = p.NewFeature(FeatureKind.Cone);
+            double half = 44.5 * Math.PI / 180;
+            for (int ring = 0; ring < 4; ring++) for (int i = 0; i < 10; i++)
+            {
+                double depth = 1 + ring * 1.5, rr = 10 - depth * Math.Tan(half), t = i * Math.PI / 5 + ring * 0.3;
+                Vec3 q = new Vec3(rr * Math.Cos(t), rr * Math.Sin(t), -depth);
+                cs.Points.Add(new MeasuredPoint(q, (new Vec3(0, 0, q.Z) - q).Normalized(), 0));
+            }
+            FeatureSolver.Solve(p, cs);
+            cs.FixSize = true; cs.FixedSize = 90;
+            FeatureSolver.Solve(p, cs);
+            Check(Math.Abs(Math.Abs(((ConePrim)cs.Geometry).HalfAngle) - Math.PI / 4) < 1e-12, "fixed cone angle");
+            // a Ø20 bore probed with a Ø3 ball, fixed at Ø20: the compensated bore is exactly Ø20
+            var bore = p.NewFeature(FeatureKind.Cylinder);
+            foreach (var q in Cylinder(new Vec3(100, 0, 0), Vec3.UnitZ, 8.5, 15))
+            {
+                Vec3 radial = (q - new Vec3(100, 0, q.Z)).Normalized();
+                bore.Points.Add(new MeasuredPoint(q + radial * 0.01, (radial - Vec3.UnitZ).Normalized(), 1.5));
+            }
+            bore.FixSize = true; bore.FixedSize = 20;
+            FeatureSolver.Solve(p, bore);
+            Check(Math.Abs(((CylinderPrim)bore.Geometry).Radius - 10) < 1e-12, "fixed bore with ball compensation: R {0}", ((CylinderPrim)bore.Geometry).Radius);
         }
 
         static Feature Cons(Project p, string op, params Feature[] src)

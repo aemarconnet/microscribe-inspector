@@ -53,7 +53,7 @@ Effort: **S** small · **M** medium · **L** large.
 14. [x] **More constructions** (S–M) — offset plane, mid-plane, projection onto a plane, plane
     through a line parallel/perpendicular to a datum, circle or plane through hole centres (bolt
     circle), mirror.
-15. [ ] **Constrained fits** (M) — fixed diameter or cone angle, forced parallel/perpendicular to a
+15. [x] **Constrained fits** (M) — fixed diameter or cone angle, forced parallel/perpendicular to a
     datum.
 16. [ ] **More export formats** (M) — IGES, STL mesh of freeform surfaces, DXF; results as QIF/DMIS.
 
