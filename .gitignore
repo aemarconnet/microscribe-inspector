@@ -1,9 +1,10 @@
 # Third-party software, manuals and personal notes kept locally: never publish
 MicroScribe-3DX Software/
 
-# Build output (publish dist zips as GitHub Release assets instead)
+# Build output — only the portable zip in dist/ is committed (rebuild it with package.ps1)
 bin/
-dist/
+dist/*
+!dist/MicroScribeInspector-portable.zip
 *.pdb
 
 # Local settings and hardware logs (contain the arm's serial number)

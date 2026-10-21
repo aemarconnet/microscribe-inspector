@@ -20,9 +20,12 @@ Copy-Item (Join-Path $root 'LICENSE') (Join-Path $dir 'LICENSE.txt')
 Copy-Item (Join-Path $root 'LICENSE-docs') (Join-Path $dir 'LICENSE-docs.txt')
 Copy-Item (Join-Path $root 'LEGAL.md') (Join-Path $dir 'docs\LEGAL.md')
 Set-Content -Path (Join-Path $dir 'Install for this user.cmd') -Encoding ASCII -Value "@echo off`r`n""%~dp0MicroScribeInspector.exe"" /install /desktop`r`n"
-$zip = Join-Path $dist ("MicroScribeInspector-$ver-portable.zip")
-if (Test-Path $zip) { Remove-Item $zip }
+Set-Content -Path (Join-Path $dir 'VERSION.txt') -Encoding ASCII -Value "MicroScribe Inspector $ver"
+# Fixed file name: the repository's README links to dist/MicroScribeInspector-portable.zip
+Get-ChildItem $dist -Filter *.zip | Remove-Item
+$zip = Join-Path $dist 'MicroScribeInspector-portable.zip'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory($dir, $zip, 'Optimal', $true)
+Write-Host "Version:         $ver"
 Write-Host "Portable folder: $dir"
 Write-Host "Zip:             $zip"

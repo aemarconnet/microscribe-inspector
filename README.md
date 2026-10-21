@@ -5,6 +5,9 @@ Probe a part with the arm and foot pedal, fit planes, cylinders, cones, spheres,
 curves and freeform surfaces, and export them as real CAD surfaces (STEP) for SolidWorks and other CAD
 systems.
 
+**⬇ Download:** [MicroScribeInspector-portable.zip](dist/MicroScribeInspector-portable.zip) —
+unzip anywhere and run `MicroScribeInspector.exe` (Windows 10/11, nothing to install).
+
 ![Measuring with click-to-measure dimensions](docs/images/measure.png)
 
 The original PC software for these arms is no longer supported. MicroScribe Inspector is an
@@ -53,7 +56,8 @@ foot pedal into the arm.
 
 ## Getting started
 
-1. Download the portable zip from the Releases page and unzip it anywhere, or build from source (below).
+1. Download [the portable zip](dist/MicroScribeInspector-portable.zip) (also attached to each release)
+   and unzip it anywhere, or build from source (below).
 2. Put the arm in its **home pose** (resting in the base cradle) and switch it on. The encoders zero at power-up.
 3. Run `MicroScribeInspector.exe`, pick the COM port and press **Connect**.
 4. Pick a feature type on the left, or just press the pedal and let **Auto** classify the points.
