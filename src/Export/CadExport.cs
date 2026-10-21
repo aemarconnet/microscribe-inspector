@@ -90,6 +90,14 @@ namespace MicroScribe.Export
                     else w.AddBSpline(f.Name, c.Degree, c.Ctrl, c.Knots);
                     wires++;
                 }
+                else if (g is ProfilePrim)
+                {
+                    var pp = (ProfilePrim)g;
+                    w.AddPolyline(f.Name, pp.Outline());
+                    w.AddPoint(f.Name + " center", pp.Center);
+                    if (opt.ReferenceGeometry) w.AddLine(f.Name + " axis", pp.Center - pp.XDir * (pp.Length / 2), pp.Center + pp.XDir * (pp.Length / 2));
+                    wires += 3;
+                }
                 else if (g is CloudPrim)
                 {
                     int k = 1;
@@ -317,6 +325,17 @@ namespace MicroScribe.Export
             Func<Vec3, string> V = v => u.L(v.X) + ", " + u.L(v.Y) + ", " + u.L(v.Z);
             Func<Vec3, string> D = v => string.Format(CI, "{0:0.00000}, {1:0.00000}, {2:0.00000}", v.X, v.Y, v.Z);
             string un = " " + u.U;
+            if (g is ProfilePrim)
+            {
+                var pp = (ProfilePrim)g;
+                r.Add("Centre    " + V(pp.Center) + un);
+                r.Add("Normal    " + D(pp.Normal));
+                r.Add("Direction " + D(pp.XDir));
+                r.Add((pp.Shape == FeatureKind.Ellipse ? "Axes      " : "Length    ") + u.L(pp.Length) + (pp.Shape == FeatureKind.Ellipse ? " × " : " × width ") + u.L(pp.Width) + un);
+                if (pp.Shape == FeatureKind.Slot) r.Add("End radius " + u.L(pp.Width / 2) + un + "   centre distance " + u.L(Math.Max(0, pp.Length - pp.Width)) + un);
+                if (pp.Stats != null && pp.Stats.N > 0) r.Add("Form      " + u.L(pp.Stats.Form) + "   RMS " + u.L(pp.Stats.Rms) + un);
+                return r;
+            }
             if (g is CloudPrim)
             {
                 var c = (CloudPrim)g; Vec3 lo, hi; c.Bounds(out lo, out hi);

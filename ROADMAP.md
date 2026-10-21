@@ -46,8 +46,10 @@ Effort: **S** small · **M** medium · **L** large.
     crosses parallel planes at a set spacing) and free point-cloud scanning with filtering.
 12. [x] **2D sketch from a probed profile** (M) — project onto a plane, split into lines and arcs,
     export DXF and SolidWorks curve files.
-13. [ ] **More feature types** (M) — round and square slot, rectangle, ellipse, torus (fillets),
-    width / keyway, edge and vector points for sheet metal.
+13. [x] **More feature types** (M) — round-ended slot, rectangle (square slot, pocket, tab) and
+    ellipse, with ball compensation. Fillets along straight edges measure as (partial) cylinders;
+    sheet-metal vector points are comparison points against the nominal model (item 8); width and
+    keyways come with the mid-plane construction (item 14).
 14. [ ] **More constructions** (S–M) — offset plane, mid-plane, projection onto a plane, plane
     through a line parallel/perpendicular to a datum, circle or plane through hole centres (bolt
     circle), mirror.

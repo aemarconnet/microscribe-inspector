@@ -237,6 +237,12 @@ namespace MicroScribe.App
                 surf.SphereCap(sp.Center, sp.Radius, pole, cap);
                 wire.Sphere(sp.Center, tube * 2, 8, 6);
             }
+            else if (g is ProfilePrim)
+            {
+                var pp = (ProfilePrim)g;
+                wire.Polyline(pp.Outline().Select(M.TransformPoint).ToList(), tube);
+                wire.Sphere(M.TransformPoint(pp.Center), tube * 2, 8, 6);
+            }
             else if (g is CirclePrim)
             {
                 var ci = (CirclePrim)g;

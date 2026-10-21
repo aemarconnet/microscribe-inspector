@@ -22,6 +22,7 @@ namespace MicroScribe.Geometry
             else if (g is CurvePrim) { var t = ((CurvePrim)p).Transformed(m); t.Stats = p.Stats; return t; }
             else if (g is SurfacePrim) { var t = ((SurfacePrim)p).Transformed(m); t.Stats = p.Stats; return t; }
             else if (g is CloudPrim) { var t = ((CloudPrim)p).Transformed(m); t.Stats = p.Stats; return t; }
+            else if (g is ProfilePrim) { var q = (ProfilePrim)g; q.Center = m.TransformPoint(q.Center); q.Normal = m.TransformVector(q.Normal); q.XDir = m.TransformVector(q.XDir); }
             return g;
         }
 

@@ -27,6 +27,7 @@ namespace MicroScribe.Geometry
             if (p is SpherePrim) return ((SpherePrim)p).Center;
             if (p is CylinderPrim) return ((CylinderPrim)p).AxisPoint;
             if (p is ConePrim) return ((ConePrim)p).AxisPoint;
+            if (p is ProfilePrim) return ((ProfilePrim)p).Center;
             return Vec3.Zero;
         }
 
@@ -38,13 +39,14 @@ namespace MicroScribe.Geometry
             if (p is CirclePrim) return ((CirclePrim)p).Normal;
             if (p is CylinderPrim) return ((CylinderPrim)p).Axis;
             if (p is ConePrim) return ((ConePrim)p).Axis;
+            if (p is ProfilePrim) return ((ProfilePrim)p).Normal;
             return null;
         }
 
         /// <summary>True if the primitive behaves as a line for distance purposes (line or axis).</summary>
         static bool IsLinear(Primitive p) { return p is LinePrim || p is CylinderPrim || p is ConePrim; }
 
-        static bool IsPointLike(Primitive p) { return p is PointPrim || p is CirclePrim || p is SpherePrim; }
+        static bool IsPointLike(Primitive p) { return p is PointPrim || p is CirclePrim || p is SpherePrim || p is ProfilePrim; }
 
         public static Measurement Distance(Primitive a, Primitive b)
         {

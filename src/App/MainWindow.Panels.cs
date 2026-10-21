@@ -205,7 +205,7 @@ namespace MicroScribe.App
                     opt.Children.Add(Ui.Text("Auto: toward where the stylus points (tracing over a surface). Outside / Inside: within the curve's plane, " +
                         "for tracing around a boss or inside a pocket with the ball against the wall.", 11, null, Ui.Muted));
             }
-            if (f.Kind == FeatureKind.Circle)
+            if (f.Kind == FeatureKind.Circle || ProfileFit.IsProfile(f.Kind))
             {
                 var pb = new ComboBox { Width = 160 };
                 pb.Items.Add("Own best-fit plane");
@@ -222,7 +222,7 @@ namespace MicroScribe.App
                 full.Click += (s, e) => { f.FullRevolution = full.IsChecked == true; Changed(); };
                 opt.Children.Add(full);
             }
-            if (f.Kind != FeatureKind.Plane && !Fitter.IsTraced(f.Kind) && f.Kind != FeatureKind.Point)
+            if (f.Kind != FeatureKind.Plane && !Fitter.IsTraced(f.Kind) && f.Kind != FeatureKind.Point && !ProfileFit.IsProfile(f.Kind))
                 opt.Children.Add(Ui.Row(Lbl("Surface margin"), Ui.LenBox(f.ExportMargin, v => { f.ExportMargin = Math.Max(0, v); Changed(); }), Ui.UnitLabel()));
             var vis = new CheckBox { Content = "Visible", IsChecked = f.Visible, Margin = new Thickness(0, 4, 12, 0) };
             vis.Click += (s, e) => { f.Visible = vis.IsChecked == true; Changed(); };

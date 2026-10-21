@@ -189,7 +189,7 @@ namespace MicroScribe.Model
             Vec3[] p = pts.Select(q => q.Position).ToArray();
             Vec3[] d = pts.Select(q => q.Direction).ToArray();
             PlanePrim proj2 = null;
-            if (f.Kind == FeatureKind.Circle && f.ProjectionPlaneId != 0)
+            if ((f.Kind == FeatureKind.Circle || ProfileFit.IsProfile(f.Kind)) && f.ProjectionPlaneId != 0)
             {
                 var pf = proj.Find(f.ProjectionPlaneId);
                 if (pf != null) proj2 = pf.Geometry as PlanePrim;
@@ -201,6 +201,22 @@ namespace MicroScribe.Model
                 if (raw == null) { f.Geometry = null; f.FitError = "Fit failed"; return; }
                 double r = pts.Average(q => q.ProbeRadius);
                 f.Geometry = Compensate(raw, f, pts, r);
+                var prof = raw as ProfilePrim;
+                if (prof != null && r > 0 && f.Compensation != CompensationSide.None)
+                {
+                    // the offset of a slot / rectangle / ellipse is not the same shape: move every ball centre
+                    // onto the wall along the outline normal and fit again
+                    bool outside = IsOutside(raw, pts, f.Compensation);
+                    const double h = 1e-4;
+                    var contact = pts.Select(q =>
+                    {
+                        Vec3 p0 = q.Position, xd = prof.XDir, yd = prof.YDir;
+                        Vec3 nrm = (xd * (prof.SignedDistance(p0 + xd * h) - prof.SignedDistance(p0 - xd * h)) + yd * (prof.SignedDistance(p0 + yd * h) - prof.SignedDistance(p0 - yd * h))).Normalized();
+                        return p0 + nrm * (outside ? -q.ProbeRadius : q.ProbeRadius);
+                    }).ToArray();
+                    var refit = ProfileFit.Fit(f.Kind, contact, new PlanePrim { Origin = prof.Center, Normal = prof.Normal });
+                    if (refit != null) f.Geometry = refit;   // its residuals are those of the contact points
+                }
             }
             catch (Exception ex)
             {
@@ -246,6 +262,7 @@ namespace MicroScribe.Model
                 if (g is CylinderPrim) ((CylinderPrim)g).Radius += dr;
                 else if (g is SpherePrim) ((SpherePrim)g).Radius += dr;
                 else if (g is CirclePrim) ((CirclePrim)g).Radius += dr;
+                else if (g is ProfilePrim) { var pp = (ProfilePrim)g; pp.Length += 2 * dr; pp.Width += 2 * dr; }
                 else if (g is ConePrim)
                 {
                     var c = (ConePrim)g;
@@ -386,6 +403,10 @@ namespace MicroScribe.Model
                 {
                     var c = (CirclePrim)raw; Vec3 w = q.Position - c.Center; radial = w - c.Normal * w.Dot(c.Normal);
                 }
+                else if (raw is ProfilePrim)
+                {
+                    var c = (ProfilePrim)raw; Vec3 w = q.Position - c.Center; radial = w - c.Normal * w.Dot(c.Normal);
+                }
                 else if (raw is CylinderPrim)
                 {
                     var c = (CylinderPrim)raw; Vec3 w = q.Position - c.AxisPoint; radial = w - c.Axis * w.Dot(c.Axis);
@@ -475,8 +496,9 @@ namespace MicroScribe.Model
         public static void SolveAll(Project proj)
         {
             // measured first (circles last: they may project onto planes), then constructions, then alignment
-            foreach (var f in proj.Features.Where(x => x.Origin == FeatureOrigin.Measured && x.Kind != FeatureKind.Circle)) Solve(proj, f);
-            foreach (var f in proj.Features.Where(x => x.Origin == FeatureOrigin.Measured && x.Kind == FeatureKind.Circle)) Solve(proj, f);
+            Func<Feature, bool> projected = x => x.Kind == FeatureKind.Circle || ProfileFit.IsProfile(x.Kind);
+            foreach (var f in proj.Features.Where(x => x.Origin == FeatureOrigin.Measured && !projected(x))) Solve(proj, f);
+            foreach (var f in proj.Features.Where(x => x.Origin == FeatureOrigin.Measured && projected(x))) Solve(proj, f);
             foreach (var f in proj.Features.Where(x => x.Origin == FeatureOrigin.Constructed)) Solve(proj, f);
             AlignmentSolver.Apply(proj);
         }

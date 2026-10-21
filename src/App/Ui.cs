@@ -34,6 +34,9 @@ namespace MicroScribe.App
                 case FeatureKind.Curve: return Color.FromRgb(236, 72, 153);
                 case FeatureKind.Surface: return Color.FromRgb(132, 204, 22);
                 case FeatureKind.Cloud: return Color.FromRgb(20, 184, 166);
+                case FeatureKind.Slot: return Color.FromRgb(217, 119, 6);
+                case FeatureKind.Rectangle: return Color.FromRgb(180, 83, 9);
+                case FeatureKind.Ellipse: return Color.FromRgb(234, 88, 12);
             }
             return Colors.Gray;
         }
@@ -52,6 +55,9 @@ namespace MicroScribe.App
                 case FeatureKind.Cone: return "M10,2 L3,15 A7,2.5 0 0 0 17,15 Z";
                 case FeatureKind.Curve: return "M2,15 C6,1 10,19 18,5";
                 case FeatureKind.Surface: return "M2,8 C6,3 10,11 18,5 L18,14 C10,20 6,12 2,17 Z M2,12.5 C6,7.5 10,15.5 18,9.5 M7,6 L7,15 M12.5,7.5 L12.5,16.5";
+                case FeatureKind.Slot: return "M6,5 L14,5 A5,5 0 0 1 14,15 L6,15 A5,5 0 0 1 6,5 Z M6,10 L14,10";
+                case FeatureKind.Rectangle: return "M2,5 L18,5 L18,15 L2,15 Z M10,8 L10,12 M8,10 L12,10";
+                case FeatureKind.Ellipse: return "M1.5,10 A8.5,5 0 1 1 18.5,10 A8.5,5 0 1 1 1.5,10 Z M10,8 L10,12 M8,10 L12,10";
                 case FeatureKind.Cloud: return "M3,12 L3.5,12 M6,8 L6.5,8 M8,14 L8.5,14 M10,5 L10.5,5 M12,11 L12.5,11 M14,16 L14.5,16 M15,7 L15.5,7 M17,12 L17.5,12 M5,16 L5.5,16 M11,17 L11.5,17";
             }
             return "M2,2 L18,18";

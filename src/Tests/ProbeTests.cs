@@ -19,6 +19,76 @@ namespace MicroScribe.Tests
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("arm check statistics + stillness", TestArmCheck));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("scan modes, section-plane surface, point clouds", TestScans));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("2D sketch: lines and arcs, sharp corners, DXF", TestSketch));
+            Program.ExtraTests.Add(new KeyValuePair<string, Action>("slot, rectangle and ellipse fits", TestProfiles));
+        }
+
+        /// <summary>Points on a shape's outline (local x along the length), with outward normals.</summary>
+        static List<KeyValuePair<Vec3, Vec3>> Outline(FeatureKind k, double L, double W, int n)
+        {
+            var r = new List<KeyValuePair<Vec3, Vec3>>();
+            for (int i = 0; i < n; i++)
+            {
+                double t = (i + 0.37) / n;
+                double x, y, nx, ny;
+                if (k == FeatureKind.Ellipse)
+                {
+                    double a = L / 2, b = W / 2, ang = 2 * Math.PI * t;
+                    x = a * Math.Cos(ang); y = b * Math.Sin(ang); nx = x / (a * a); ny = y / (b * b);
+                }
+                else if (k == FeatureKind.Rectangle)
+                {
+                    int side = (int)(t * 4); double s = t * 4 - side;
+                    double hx = L / 2, hy = W / 2;
+                    if (side == 0) { x = -hx + s * L; y = -hy; nx = 0; ny = -1; }
+                    else if (side == 1) { x = hx; y = -hy + s * W; nx = 1; ny = 0; }
+                    else if (side == 2) { x = hx - s * L; y = hy; nx = 0; ny = 1; }
+                    else { x = -hx; y = hy - s * W; nx = -1; ny = 0; }
+                    // keep away from the corners, where the ball touches two walls
+                    if (s < 0.08 || s > 0.92) continue;
+                }
+                else
+                {
+                    double rr = W / 2, a = (L - W) / 2;
+                    int part = (int)(t * 4); double s = t * 4 - part;
+                    if (part == 0) { x = -a + 2 * a * s; y = -rr; nx = 0; ny = -1; }
+                    else if (part == 1) { double ang = -Math.PI / 2 + Math.PI * s; x = a + rr * Math.Cos(ang); y = rr * Math.Sin(ang); nx = Math.Cos(ang); ny = Math.Sin(ang); }
+                    else if (part == 2) { x = a - 2 * a * s; y = rr; nx = 0; ny = 1; }
+                    else { double ang = Math.PI / 2 + Math.PI * s; x = -a + rr * Math.Cos(ang); y = rr * Math.Sin(ang); nx = Math.Cos(ang); ny = Math.Sin(ang); }
+                }
+                double ln = Math.Sqrt(nx * nx + ny * ny);
+                r.Add(new KeyValuePair<Vec3, Vec3>(new Vec3(x, y, 0), new Vec3(nx / ln, ny / ln, 0)));
+            }
+            return r;
+        }
+
+        static void TestProfiles()
+        {
+            var proj = new Project();
+            Vec3 c = new Vec3(10, 20, 3);
+            foreach (var k in new[] { FeatureKind.Slot, FeatureKind.Rectangle, FeatureKind.Ellipse })
+            {
+                double L = k == FeatureKind.Rectangle ? 30 : 40, W = k == FeatureKind.Rectangle ? 15 : k == FeatureKind.Slot ? 12 : 16;
+                double ang = (k == FeatureKind.Slot ? 30 : k == FeatureKind.Rectangle ? 10 : -20) * Math.PI / 180;
+                Vec3 X = new Vec3(Math.Cos(ang), Math.Sin(ang), 0), Y = new Vec3(-Math.Sin(ang), Math.Cos(ang), 0);
+                foreach (double ball in new[] { 0.0, 1.5 })
+                {
+                    // a pocket: the ball centre sits one radius inside the wall, the stylus leans toward the wall
+                    var f = proj.NewFeature(k);
+                    foreach (var o in Outline(k, L, W, 48))
+                    {
+                        Vec3 nrm = X * o.Value.X + Y * o.Value.Y;
+                        Vec3 p = c + X * o.Key.X + Y * o.Key.Y - nrm * ball + new Vec3(G(0.003), G(0.003), G(0.003));
+                        f.Points.Add(new MeasuredPoint(p, (nrm - Vec3.UnitZ).Normalized(), ball));
+                    }
+                    FeatureSolver.Solve(proj, f);
+                    var g = f.Geometry as ProfilePrim;
+                    Check(g != null, "{0} fitted ({1})", k, f.FitError);
+                    Check(Math.Abs(g.Length - L) < 0.02 && Math.Abs(g.Width - W) < 0.02, "{0} ball {1}: {2} × {3}", k, ball, g.Length, g.Width);
+                    Check((g.Center - c).Length < 0.02, "{0} centre off by {1}", k, (g.Center - c).Length);
+                    Check(Math.Abs(g.XDir.Dot(X)) > Math.Cos(0.2 * Math.PI / 180), "{0} direction", k);
+                    Check(g.Stats.Rms < 0.01, "{0} rms {1}", k, g.Stats.Rms);
+                }
+            }
         }
 
         static void TestSketch()

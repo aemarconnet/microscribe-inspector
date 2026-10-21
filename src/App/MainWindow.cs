@@ -222,7 +222,7 @@ namespace MicroScribe.App
         static readonly FeatureKind?[] MeasureKinds =
         {
             FeatureKind.Point, FeatureKind.Line, FeatureKind.Plane, FeatureKind.Circle, FeatureKind.Cylinder, FeatureKind.Cone,
-            FeatureKind.Sphere, FeatureKind.Curve, FeatureKind.Surface, FeatureKind.Cloud, null
+            FeatureKind.Sphere, FeatureKind.Slot, FeatureKind.Rectangle, FeatureKind.Ellipse, FeatureKind.Curve, FeatureKind.Surface, FeatureKind.Cloud, null
         };
 
         /// <summary>mm / inch display toggle (all values are stored in mm).</summary>
@@ -394,6 +394,9 @@ namespace MicroScribe.App
                 case FeatureKind.Sphere: return "Sphere — 4+ points spread over the ball";
                 case FeatureKind.Curve: return "Curve scan — hold pedal 1 and trace; points every N mm (spline or linear)";
                 case FeatureKind.Surface: return "Freeform surface — trace several curves across the surface (hold pedal 1 for each), then finish";
+                case FeatureKind.Slot: return "Round-ended slot (or tab) — probe 8+ points around its wall: both straight sides and both ends";
+                case FeatureKind.Rectangle: return "Rectangle: square slot, pocket or tab — probe 2+ points on each of the four sides";
+                case FeatureKind.Ellipse: return "Ellipse — probe 8+ points spread around its wall";
                 case FeatureKind.Cloud: return "Point cloud — hold pedal 1 and sweep the stylus over the surface (scan mode in Arm & tip); for best fits, profiles and XYZ export";
             }
             return "";
@@ -539,6 +542,7 @@ namespace MicroScribe.App
             string u = Ui.Unit(inch);
             string val = "";
             if (g is CirclePrim) val = "Ø" + Ui.Mm(2 * ((CirclePrim)g).Radius, inch);
+            else if (g is ProfilePrim) val = Ui.Mm(((ProfilePrim)g).Length, inch) + "×" + Ui.Mm(((ProfilePrim)g).Width, inch);
             else if (g is CylinderPrim) val = "Ø" + Ui.Mm(2 * ((CylinderPrim)g).Radius, inch);
             else if (g is SpherePrim) val = "Ø" + Ui.Mm(2 * ((SpherePrim)g).Radius, inch);
             else if (g is ConePrim) val = (2 * ((ConePrim)g).HalfAngle * 180 / Math.PI).ToString("0.00", Ui.CI) + "°";

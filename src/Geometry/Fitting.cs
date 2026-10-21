@@ -5,7 +5,7 @@ using MicroScribe.Core;
 
 namespace MicroScribe.Geometry
 {
-    public enum FeatureKind { Point, Line, Plane, Circle, Sphere, Cylinder, Cone, Curve, Surface, Cloud }
+    public enum FeatureKind { Point, Line, Plane, Circle, Sphere, Cylinder, Cone, Curve, Surface, Cloud, Slot, Rectangle, Ellipse }
 
     /// <summary>Residual statistics of a fit (signed residuals, mm).</summary>
     public sealed class FitStats
@@ -162,6 +162,9 @@ namespace MicroScribe.Geometry
                 case FeatureKind.Curve: return 2;
                 case FeatureKind.Surface: return 4;
                 case FeatureKind.Cloud: return 3;
+                case FeatureKind.Slot:
+                case FeatureKind.Rectangle:
+                case FeatureKind.Ellipse: return 6;
             }
             return 1;
         }
@@ -178,6 +181,9 @@ namespace MicroScribe.Geometry
                 case FeatureKind.Sphere: return FitSphere(pts);
                 case FeatureKind.Cylinder: return FitCylinder(pts, stylusDirs);
                 case FeatureKind.Cone: return FitCone(pts, stylusDirs);
+                case FeatureKind.Slot:
+                case FeatureKind.Rectangle:
+                case FeatureKind.Ellipse: return ProfileFit.Fit(kind, pts, projectionPlane);
             }
             return null;
         }

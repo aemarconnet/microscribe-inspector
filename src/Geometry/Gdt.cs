@@ -206,7 +206,7 @@ namespace MicroScribe.Model
             {
                 case DimKind.Form:
                     {
-                        if (!(g is PlanePrim || g is LinePrim || g is CirclePrim || g is CylinderPrim || g is SpherePrim || g is ConePrim))
+                        if (!(g is PlanePrim || g is LinePrim || g is CirclePrim || g is CylinderPrim || g is SpherePrim || g is ConePrim || g is ProfilePrim))
                         { r.Error = "Form needs a plane, line, circle, cylinder, cone or sphere"; return; }
                         var cps = FeatureSolver.ContactPoints(f0, f0.ActivePoints.ToList());
                         if (cps.Count < Fitter.MinPoints(f0.Kind) + 1) { r.Error = "Not enough points to judge the form (" + cps.Count + ")"; return; }
@@ -265,7 +265,7 @@ namespace MicroScribe.Model
                     }
                 case DimKind.Position:
                     {
-                        if (!(g is PointPrim || g is CirclePrim || g is SpherePrim || IsAxis(g))) { r.Error = "Position needs a point, circle, sphere, cylinder, cone or line"; return; }
+                        if (!(g is PointPrim || g is CirclePrim || g is SpherePrim || g is ProfilePrim || IsAxis(g))) { r.Error = "Position needs a point, circle, slot, sphere, cylinder, cone or line"; return; }
                         Mat4 part = p.AlignmentMatrix;
                         Vec3 k = part.TransformPoint(key), dev = k - new Vec3(d.NX, d.NY, d.NZ);
                         var dir = Constructions.Direction(g);
