@@ -36,9 +36,9 @@ Effort: **S** small · **M** medium · **L** large.
    comparison points. (STEP import of the nominal model is a later addition.)
 9. [x] **Report with pictures** (M) — HTML (print to PDF from the browser) with a 3D snapshot,
    tables, pass/fail, logo and part, serial and operator fields; CSV results log per part.
-10. [ ] **Inspection plans: learn and replay** (L) — record the feature sequence with nominals,
-    prompts and pictures, then guide the operator through the next part step by step; results per
-    part feed simple SPC (trend, Cp/Cpk).
+10. [x] **Inspection plans: learn and replay** (L) — a measured project is the plan: features in
+    order with their notes as prompts, nominals and tolerances; the next part is measured step by
+    step with markers where to probe; results per part feed simple SPC (trend, Cp/Cpk).
 
 ## Phase 3 — Capture and digitizing to CAD
 

@@ -168,6 +168,9 @@ namespace MicroScribe.App
             item(meas, "Undo last point", "Backspace", UndoPoint);
             item(meas, "Cancel", "Esc", CancelMeasure);
             meas.Items.Add(new Separator());
+            item(meas, "Run this project as an inspection plan", "", RunCurrentAsPlan);
+            item(meas, "Run inspection plan from file...", "", RunPlanFromFile);
+            meas.Items.Add(new Separator());
             item(meas, "Measure distance (click entities)", "D", () => SetTool(Tool.Distance));
             item(meas, "Measure angle", "A", () => SetTool(Tool.Angle));
             item(meas, "Measure diameter", "R", () => SetTool(Tool.Diameter));
@@ -472,6 +475,7 @@ namespace MicroScribe.App
             _tabs.Items.Add(new TabItem { Header = "Alignment", Content = Scroll(BuildAlignmentPanel()) });
             _tabs.Items.Add(new TabItem { Header = "Arm & tip", Content = Scroll(BuildArmPanel()) });
             _tabs.Items.Add(new TabItem { Header = "Workspace", Content = Scroll(BuildWorkspacePanel()) });
+            _tabs.Items.Add(new TabItem { Header = "Plan", Content = Scroll(BuildPlanPanel()) });
             _tabs.SelectionChanged += (s, e) =>
             {
                 if (e.Source != _tabs) return;

@@ -296,6 +296,7 @@ namespace MicroScribe.App
             RebuildFeatureList();
             RebuildScene();
             if (_active == _selected) RebuildFeaturePanel();
+            PlanAfterPoint();
         }
 
         /// <summary>Plays the happy chime for a point that agrees with the fit, a low "hmm" for an outlier.</summary>
@@ -383,7 +384,7 @@ namespace MicroScribe.App
                 f.Name = UniqueName(k.ToString());
                 Status("Auto-detected: " + k);
             }
-            if (n == 0) _proj.Features.Remove(f);
+            if (n == 0 && _plan == null) _proj.Features.Remove(f);
             else if (n < Fitter.MinPoints(f.Kind) && !silent)
                 Status(f.Name + " needs at least " + Fitter.MinPoints(f.Kind) + " points (kept, you can add more later)");
             _active = null;
@@ -396,6 +397,7 @@ namespace MicroScribe.App
                 if (ok) Sounds.Success(); else Sounds.Blip();
                 if (f.Geometry == null && f.FitError != null) Status(f.Name + ": " + f.FitError);
             }
+            if (!silent) PlanAfterFinish(f);
         }
 
         string UniqueName(string baseName)
@@ -408,6 +410,7 @@ namespace MicroScribe.App
         void CancelMeasure()
         {
             if (_active == null) return;
+            if (PlanRunning) { Status("A plan is running — use Skip step, Redo step or Stop plan (Plan tab)"); return; }
             var f = _active;
             _active = null; _scanning = false; _captureStart = -1;
             if (f.Points.Count == 0 || MessageBox.Show(this, "Discard " + f.Name + " and its " + f.Points.Count + " points?", "Cancel", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
@@ -453,6 +456,12 @@ namespace MicroScribe.App
                 hint = string.Format("{0} curve{1} traced — hold pedal 1 to trace each curve across the surface (N = next curve), 2+ needed", curves, curves == 1 ? "" : "s");
             }
             else hint = n < need ? string.Format("{0} more point{1} needed", need - n, need - n == 1 ? "" : "s") : "add more points to improve the fit";
+            if (PlanRunning && _active == StepFeature)
+            {
+                int planned = InspectionPlan.PlannedPoints(PlanSteps[_planStep]);
+                hint = string.Format("plan step {0} of {1}", _planStep + 1, PlanSteps.Count) + (planned > 0 ? string.Format(", {0} of {1} points", n, planned) : ", trace then pedal 2")
+                    + (string.IsNullOrWhiteSpace(_active.Notes) ? "" : " — " + _active.Notes.Trim());
+            }
             _prompt.Text = string.Format("Measuring {0} ({1})  —  {2} point{3}, {4}.   Pedal 1/Space: capture · Pedal 2/Enter: finish",
                 _active.Name, kind, n, n == 1 ? "" : "s", hint);
             _promptBar.Visibility = Visibility.Visible;

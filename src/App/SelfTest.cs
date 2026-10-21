@@ -269,6 +269,48 @@ namespace MicroScribe.App
                 _dirty = false;
                 _s.WorkArea = new WorkArea();
             });
+            // inspection plan: replay the demo project on a "next part" (the plan's points, slightly moved), log three parts
+            string keepLog = null;
+            steps.Add(() =>
+            {
+                keepLog = _s.ResultsLogPath;
+                var learned = ProjectIO.Clone(_proj);
+                StartPlan(learned, "Demo plan", "S001");
+                var rng = new Random(3);
+                int guard = 0;
+                while (PlanRunning && guard++ < 100)
+                {
+                    var f = StepFeature; var src = PlanSteps[_planStep];
+                    if (f.Kind == FeatureKind.Curve || f.Kind == FeatureKind.Surface)
+                    {
+                        foreach (var q in src.Points) f.Points.Add(new MeasuredPoint(q.Position, q.Direction, q.ProbeRadius) { Section = q.Section });
+                        FeatureSolver.Solve(_proj, f);
+                        FinishMeasure();
+                        continue;
+                    }
+                    foreach (var q in src.ActivePoints.ToList())
+                    {
+                        if (StepFeature != f) break;
+                        AddPoint(q.Position + new Vec3(rng.NextDouble() - 0.5, rng.NextDouble() - 0.5, rng.NextDouble() - 0.5) * 0.02, q.Direction);
+                    }
+                    if (PlanRunning && StepFeature == f) FinishMeasure();
+                }
+                check(string.Format("plan run: done={0}, {1} features measured", _planDone, _proj.Features.Count(x => x.Geometry != null)));
+                _s.ResultsLogPath = Path.Combine(dir, "results-log.csv");
+                foreach (var serial in new[] { "S001", "S002", "S003" })
+                {
+                    foreach (var f in _proj.Features.Where(x => x.Name.StartsWith("Bore")))
+                        foreach (var q in f.Points) q.Position += new Vec3(0.004, 0, 0);
+                    FeatureSolver.SolveAll(_proj);
+                    _proj.PartSerial = serial;
+                    Results.AppendCsv(_s.ResultsLogPath, _proj, ReportHeader(), Fmt);
+                }
+                _spcKey = "Distance 1 · " + DimensionSolver.Evaluate(_proj, _proj.Dimensions[0]).Title;
+                foreach (var r in Results.Rows(_proj).Where(x => x.Status != TolStatus.None)) check(string.Format(Ui.CI, "plan result {0}: {1:0.000} {2}", r.Name, r.Actual, r.Status));
+                RebuildPlanPanel();
+            });
+            steps.Add(() => shot("11-plan"));
+            steps.Add(() => { _s.ResultsLogPath = keepLog; StopPlan(); });
             steps.Add(() => { File.WriteAllLines(Path.Combine(dir, "selftest.log"), log); DisconnectArm(); Close(); });
 
             int k = 0;

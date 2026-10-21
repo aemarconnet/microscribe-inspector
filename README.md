@@ -38,6 +38,8 @@ written from **public protocol documentation** and **observation of the device i
 | Alignment | 3-2-1 from features or principal axes, 90° turns, origin at a feature or at any bounding-box corner, face centre or centre (clickable handles). |
 | View | Work area: sketch the usable table area and a height once, and *Fit* always frames it. 3Dconnexion SpaceMouse navigation. mm / inch toggle. |
 | Export | STEP AP214 (analytic and B-spline surfaces plus axes, centres, curves), CSV, XYZ point cloud. Projects are plain XML (`.msproj`). |
+| Inspection plans | Measure the first part once, then replay it on the next parts step by step: markers show where to probe, each step ends after the planned points, results show pass/fail; next part with the serial number counted up. |
+| Trends | Per-part results log (CSV) with a run chart, mean, σ, Cp and Cpk for every characteristic. |
 | Reports | HTML inspection report with a picture of the view, part number / serial / operator, logo, pass/fail summary and results table (print it to PDF from the browser); text report; a CSV results log that collects many parts. |
 | Portable | One small `.exe`, no installation needed; optional per-user install (Start menu, file association, uninstall entry) with no admin rights. |
 

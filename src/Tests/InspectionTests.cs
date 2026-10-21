@@ -18,6 +18,46 @@ namespace MicroScribe.Tests
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("GD&T: form, orientation, position, coaxiality", TestGdt));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("nominal model: STL, distances, pairs, best fit, profile", TestModel));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("HTML report and results log", TestReport));
+            Program.ExtraTests.Add(new KeyValuePair<string, Action>("inspection plan runs and SPC", TestPlanSpc));
+        }
+
+        static void TestPlanSpc()
+        {
+            var plan = new Project { Title = "Plan", PartNumber = "PN-7" };
+            var a = Plane(plan, 0); var b = Plane(plan, 10);
+            a.Notes = "Top face, spread the points";
+            var cons = plan.NewFeature(FeatureKind.Line);
+            cons.Origin = FeatureOrigin.Constructed; cons.Construction = "intersect"; cons.SourceIds.AddRange(new[] { a.Id, b.Id });
+            plan.Dimensions.Add(new Dimension { Id = 1, Kind = DimKind.Distance, Name = "Height", Toleranced = true, Nominal = 10, TolPlus = 0.1, TolMinus = -0.1,
+                Refs = { new EntityRef { FeatureId = a.Id }, new EntityRef { FeatureId = b.Id } } });
+            plan.AlignmentRecipe.Orientation = OrientationMode.Features; plan.AlignmentRecipe.PrimaryId = a.Id;
+            FeatureSolver.SolveAll(plan);
+            var steps = InspectionPlan.Steps(plan);
+            Check(steps.Count == 2 && steps[0].Id == a.Id && InspectionPlan.PlannedPoints(steps[0]) == 5, "steps and planned points");
+            var run = InspectionPlan.NewRun(plan, "S009");
+            Check(run.Features.Count == 3 && run.Features.All(f => f.Points.Count == 0) && run.Find(a.Id).Notes == a.Notes, "run copies the features without points");
+            Check(run.Dimensions.Count == 1 && run.Dimensions[0].Toleranced && run.PartSerial == "S009" && run.PartNumber == "PN-7" && run.AlignmentRecipe.PrimaryId == a.Id, "run keeps measurements, alignment and part number");
+            Check(plan.Features.All(f => f.Kind == FeatureKind.Line || f.Points.Count == 5), "the plan keeps its points");
+            // measure the run: the same dimension evaluates on the new points
+            foreach (var src in steps) foreach (var q in src.Points) run.Find(src.Id).Points.Add(new MeasuredPoint(q.Position + new Vec3(0, 0, src.Id == b.Id ? 0.05 : 0), q.Direction, 0));
+            FeatureSolver.SolveAll(run);
+            var t = Tolerance.Evaluate(run.Dimensions[0], DimensionSolver.Evaluate(run, run.Dimensions[0]), run.AlignmentMatrix);
+            Check(t.Status == TolStatus.Pass && Math.Abs(t.Deviation - 0.05) < 1e-9, "run evaluates its own points ({0})", t.Deviation);
+            Check(InspectionPlan.NextSerial("S009") == "S010" && InspectionPlan.NextSerial("12") == "13" && InspectionPlan.NextSerial("A") == "A-2" && InspectionPlan.NextSerial("") == "1", "serial numbers");
+
+            var st = Spc.Compute(new[] { 10.0, 10.1, 9.9, 10.05, 9.95 }, 9.8, 10.2);
+            double sigma = Math.Sqrt(0.025 / 4);
+            Check(st.N == 5 && Math.Abs(st.Mean - 10) < 1e-9 && Math.Abs(st.Sigma - sigma) < 1e-9, "mean and sigma");
+            Check(Math.Abs(st.Cp - 0.4 / (6 * sigma)) < 1e-9 && Math.Abs(st.Cpk - st.Cp) < 1e-9 && st.OutOfTolerance == 0, "Cp {0} Cpk {1}", st.Cp, st.Cpk);
+            var z = Spc.Compute(new[] { 0.02, 0.03, 0.04 }, double.NaN, 0.1);
+            Check(double.IsNaN(z.Cp) && Math.Abs(z.Cpk - (0.1 - 0.03) / (3 * 0.01)) < 1e-9, "one-sided Cpk for a zone tolerance");
+
+            string log = Path.Combine(Path.GetTempPath(), "msinspector_spc.csv");
+            if (File.Exists(log)) File.Delete(log);
+            foreach (var serial in new[] { "S1", "S2", "S3" }) Results.AppendCsv(log, run, new ReportInfo { PartNumber = "PN-7", Serial = serial }, new UnitFmt(true));
+            var entries = ResultsLog.Read(log);
+            Check(entries.Count == 3 && entries.All(e => e.Key == "Height · " + entries[0].Characteristic), "log entries {0}", entries.Count);
+            Check(Math.Abs(entries[0].Actual - 10.05) < 1e-3 && Math.Abs(entries[0].Lsl - 9.9) < 1e-3 && Math.Abs(entries[0].Usl - 10.1) < 1e-3 && entries[2].Serial == "S3", "log values back in mm");
         }
 
         static void TestReport()

@@ -415,6 +415,7 @@ namespace MicroScribe.App
                 foreach (var p in _tablePts) tp.Sphere(M.TransformPoint(p), _marker * 1.8, 10, 6);
                 g.Children.Add(SceneView.Model(tp, Materials.Emissive(Color.FromRgb(56, 189, 248))));
             }
+            AddGhost(g, labels, M);
             if (_modelPts.Count > 0)
             {
                 // model points of a point-pair alignment, numbered; the probed partners in orange
