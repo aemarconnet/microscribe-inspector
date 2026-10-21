@@ -18,7 +18,7 @@ namespace MicroScribe.Model
         public static bool IsGdt(DimKind k) { return k >= DimKind.Form; }
 
         /// <summary>Number of features to pick: the feature, then the datum for orientation and coaxiality.</summary>
-        public static int Picks(DimKind k) { return k == DimKind.Form || k == DimKind.Position ? 1 : 2; }
+        public static int Picks(DimKind k) { return k == DimKind.Form || k == DimKind.Position || k == DimKind.Profile ? 1 : 2; }
 
         /// <summary>Name of the characteristic for a feature (form depends on the geometry).</summary>
         public static string Name(DimKind k, Primitive g)
@@ -36,6 +36,7 @@ namespace MicroScribe.Model
                 case DimKind.Angularity: return "Angularity";
                 case DimKind.Position: return "Position";
                 case DimKind.Coaxiality: return "Coaxiality";
+                case DimKind.Profile: return "Profile";
             }
             return k.ToString();
         }
@@ -50,6 +51,7 @@ namespace MicroScribe.Model
                 case DimKind.Angularity: return "∠";
                 case DimKind.Position: return "Pos Ø";
                 case DimKind.Coaxiality: return "◎ Ø";
+                case DimKind.Profile: return "Profile";
             }
             return Name(k, g);
         }
@@ -63,6 +65,31 @@ namespace MicroScribe.Model
             if (g is ConePrim) { var c = (ConePrim)g; a = c.AxisPoint + c.Axis * c.HMin; b = c.AxisPoint + c.Axis * c.HMax; return; }
             if (g is LinePrim) { var l = (LinePrim)g; a = l.Start; b = l.End; return; }
             a = b = Constructions.KeyPoint(g);
+        }
+
+        /// <summary>
+        /// Profile of a surface (or of a set of comparison points) against the nominal model: the
+        /// bilateral zone 2 × the largest deviation of the probed points, ball radius removed.
+        /// </summary>
+        static void Profile(Project p, Dimension d, Feature f, DimResult r)
+        {
+            if (f == null) { r.Error = "Feature missing"; return; }
+            var mesh = p.NominalModel;
+            if (mesh == null) { r.Error = "Load a nominal model (Alignment tab) first"; return; }
+            var pts = f.ActivePoints.ToList();
+            if (pts.Count == 0) { r.Error = f.Name + " has no probed points"; return; }
+            Mat4 m = p.AlignmentMatrix;
+            var dev = pts.Select(q => ModelFit.Deviation(mesh, m, q.Position, f.Compensation == CompensationSide.None ? 0 : q.ProbeRadius)).ToList();
+            double worst = dev.Max(x => Math.Abs(x));
+            r.Value = 2 * worst;
+            r.Title = "Profile of " + f.Name + " to the model";
+            r.A = r.B = r.LabelAt = pts[dev.IndexOf(dev.OrderByDescending(Math.Abs).First())].Position;
+            r.Extra.Add(new KeyValuePair<string, double>("Largest deviation|L", dev.OrderByDescending(Math.Abs).First()));
+            r.Extra.Add(new KeyValuePair<string, double>("Min|L", dev.Min()));
+            r.Extra.Add(new KeyValuePair<string, double>("Max|L", dev.Max()));
+            r.Extra.Add(new KeyValuePair<string, double>("RMS|L", Math.Sqrt(dev.Sum(x => x * x) / dev.Count)));
+            r.Extra.Add(new KeyValuePair<string, double>("Points|N", dev.Count));
+            r.Ok = true;
         }
 
         static double DistanceToLine(Vec3 p, Vec3 o, Vec3 dir)
@@ -168,6 +195,7 @@ namespace MicroScribe.Model
         public static void Evaluate(Project p, Dimension d, DimResult r)
         {
             var feats = d.Refs.Select(e => p.Find(e.FeatureId)).ToList();
+            if (d.Kind == DimKind.Profile) { Profile(p, d, feats[0], r); return; }
             if (feats.Any(f => f == null || f.Geometry == null)) { r.Error = "Feature missing or not solved"; return; }
             var f0 = feats[0];
             Primitive g = f0.Geometry;

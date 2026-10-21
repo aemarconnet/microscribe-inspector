@@ -33,6 +33,7 @@ written from **public protocol documentation** and **observation of the device i
 | Measure tools | Click features or single probed points in the 3D view: distance (with ΔX/ΔY/ΔZ and gaps), angle (features or three points), diameter, position. Results stay as labelled dimensions and go into the report. |
 | Tolerances | Nominal value and tolerance on any measurement, green/red pass/fail in the view, an out-of-tolerance summary in the report, and a warning when a tolerance is too tight for the arm. |
 | GD&T | Flatness, straightness, roundness, cylindricity (least squares or minimum zone), parallelism, perpendicularity, angularity, position and coaxiality, by clicking the feature and its datum. |
+| Nominal model | Load an STL of the part, align to it with point pairs and a best fit, see the stylus' live distance from the model, colour probed points by deviation, and check the profile of any feature against it. |
 | Planes | Resize by dragging handles or typing a size; extend or trim to another plane so faces meet for knitting. |
 | Alignment | 3-2-1 from features or principal axes, 90° turns, origin at a feature or at any bounding-box corner, face centre or centre (clickable handles). |
 | View | Work area: sketch the usable table area and a height once, and *Fit* always frames it. 3Dconnexion SpaceMouse navigation. mm / inch toggle. |

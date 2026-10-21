@@ -17,7 +17,7 @@ using MicroScribe.Model;
 
 namespace MicroScribe.App
 {
-    public enum Tool { Select, Distance, Angle, Diameter, Coordinate, SketchArea, TraceArea, ProbeTable, Form, Parallel, Perpendicular, Angularity, Position, Coaxial }
+    public enum Tool { Select, Distance, Angle, Diameter, Coordinate, SketchArea, TraceArea, ProbeTable, Form, Parallel, Perpendicular, Angularity, Position, Coaxial, Profile, ModelPick }
 
     public sealed partial class MainWindow
     {
@@ -81,6 +81,7 @@ namespace MicroScribe.App
             }
             UpdatePrompt();
             RebuildToolLayer();
+            RebuildModelLayer();
         }
 
         string ToolPrompt()
@@ -101,6 +102,7 @@ namespace MicroScribe.App
                 case Tool.ProbeTable: return string.Format("Table plane — touch the table in 3+ spread-out places, pedal 1 / Space each ({0} so far). Enter = done", _tablePts.Count);
                 case Tool.Form: return "Form — click a plane (flatness), line (straightness), circle (roundness), cylinder (cylindricity), cone or sphere";
                 case Tool.Position: return "Position — click a hole, pin, circle, sphere or point; then enter its nominal position (part frame)";
+                case Tool.Profile: return "Profile — click a feature: its probed points are compared with the nominal model";
                 case Tool.Parallel:
                 case Tool.Perpendicular:
                 case Tool.Angularity:
@@ -128,6 +130,7 @@ namespace MicroScribe.App
                 case Tool.Angularity: return DimKind.Angularity;
                 case Tool.Position: return DimKind.Position;
                 case Tool.Coaxial: return DimKind.Coaxiality;
+                case Tool.Profile: return DimKind.Profile;
             }
             return DimKind.Distance;
         }
@@ -147,6 +150,7 @@ namespace MicroScribe.App
                 Changed();
                 return;
             }
+            if (tag.Model) { if (_tool == Tool.ModelPick) ModelPicked(hit); return; }
             if (tag.DimId != 0) { _selectedDim = tag.DimId; _tabs.SelectedIndex = 1; RebuildMeasurePanel(); RebuildDims(); return; }
             var f = _proj.Find(tag.FeatureId);
             if (f == null) return;
@@ -410,6 +414,22 @@ namespace MicroScribe.App
                 var tp = new MeshBuilder();
                 foreach (var p in _tablePts) tp.Sphere(M.TransformPoint(p), _marker * 1.8, 10, 6);
                 g.Children.Add(SceneView.Model(tp, Materials.Emissive(Color.FromRgb(56, 189, 248))));
+            }
+            if (_modelPts.Count > 0)
+            {
+                // model points of a point-pair alignment, numbered; the probed partners in orange
+                var mp = new MeshBuilder();
+                Mat4 X = ModelToDisplay;
+                for (int i = 0; i < _modelPts.Count; i++)
+                {
+                    Vec3 q = X.TransformPoint(_modelPts[i]);
+                    mp.Sphere(q, _marker * 2, 12, 8);
+                    labels.Add(new Label3D { Position = q, Text = (i + 1).ToString(), Bold = true, Background = Ui.Frozen(Color.FromArgb(220, 124, 58, 237)) });
+                }
+                g.Children.Add(SceneView.Model(mp, Materials.Emissive(Color.FromRgb(167, 139, 250))));
+                var pp = new MeshBuilder();
+                foreach (var q in _pairPts) pp.Sphere(M.TransformPoint(q), _marker * 1.8, 10, 6);
+                if (pp.VertexCount > 0) g.Children.Add(SceneView.Model(pp, Materials.Emissive(Color.FromRgb(251, 146, 60))));
             }
             g.Freeze();
             _view.SetLayer("tool", g, null, labels);

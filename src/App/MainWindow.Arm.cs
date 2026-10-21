@@ -167,8 +167,8 @@ namespace MicroScribe.App
             }
             else if (down)
             {
-                if (act == PedalAction.Finish) { if (!ToolFinish() && !CheckFinish()) FinishMeasure(); }
-                else if (act == PedalAction.Undo) { if (!ToolUndo() && !CheckUndo()) UndoPoint(); }
+                if (act == PedalAction.Finish) { if (!ToolFinish() && !CheckFinish() && !ModelPickFinish()) FinishMeasure(); }
+                else if (act == PedalAction.Undo) { if (!ToolUndo() && !CheckUndo() && !ModelPickUndo()) UndoPoint(); }
             }
         }
 
@@ -185,6 +185,7 @@ namespace MicroScribe.App
             if (_pivotActive) { CapturePivot(); return; }
             if (ToolCapture(s)) return;
             if (_check != CheckMode.None) { Capture(s, at, dwell, CheckCapture); return; }
+            if (_pairProbing) { Capture(s, at, dwell, PairCapture); return; }
             if (_active == null)
             {
                 // Quick start: capturing without an active feature starts an Auto feature.
@@ -254,7 +255,7 @@ namespace MicroScribe.App
         void DwellTick(ArmSample s)
         {
             if (_s.DwellMs <= 0 || s == null || _scanning || _captureStart >= 0) return;
-            bool wanted = _pivotActive || _check != CheckMode.None || _tool == Tool.TraceArea || _tool == Tool.ProbeTable
+            bool wanted = _pivotActive || _check != CheckMode.None || _pairProbing || _tool == Tool.TraceArea || _tool == Tool.ProbeTable
                 || (_active != null && _active.Kind != FeatureKind.Curve && _active.Kind != FeatureKind.Surface);
             if (!wanted) { _dwellArmed = true; return; }
             if (!_dwellArmed)
@@ -427,7 +428,7 @@ namespace MicroScribe.App
 
         void UpdatePrompt()
         {
-            string tp = ToolPrompt() ?? CheckPrompt();
+            string tp = ToolPrompt() ?? CheckPrompt() ?? ModelPrompt();
             if (tp != null)
             {
                 _prompt.Text = tp + "     (Esc = stop)";
@@ -490,6 +491,12 @@ namespace MicroScribe.App
                     double r = _s.CurrentTip.BallRadius;
                     if (r > 0 && !(sel.Geometry is LinePrim)) d = d >= 0 ? d - r : d + r;
                     _deviation.Text = string.Format("Δ {0}: {1}{2} {3}", sel.Name, d >= 0 ? "+" : "", Ui.Mm(d, inch), u);
+                }
+                else if (_proj.NominalModel != null)
+                {
+                    // stylus against the nominal model (ball surface)
+                    double d = ModelFit.Deviation(_proj.NominalModel, _proj.AlignmentMatrix, s.Tip, _s.CurrentTip.BallRadius);
+                    _deviation.Text = string.Format("Δ model: {0}{1} {2}", d >= 0 ? "+" : "", Ui.Mm(d, inch), u);
                 }
                 else _deviation.Text = _arm != null ? string.Format("{0:0} Hz", _arm.SampleRate) : "";
                 UpdateLive(s);

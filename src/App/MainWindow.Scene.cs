@@ -29,6 +29,13 @@ namespace MicroScribe.App
                 if (f.Geometry != null && !(f.Geometry is CurvePrim) && !(f.Geometry is SurfacePrim))
                     pts.Add(m.TransformPoint(Constructions.KeyPoint(f.Geometry)));
             }
+            var mesh = _proj.NominalModel;
+            if (mesh != null && _s.ShowModel)
+            {
+                Mat4 x = ModelToDisplay;
+                foreach (var cx in new[] { mesh.Min.X, mesh.Max.X }) foreach (var cy in new[] { mesh.Min.Y, mesh.Max.Y }) foreach (var cz in new[] { mesh.Min.Z, mesh.Max.Z })
+                    pts.Add(x.TransformPoint(new Vec3(cx, cy, cz)));
+            }
             return pts;
         }
 
@@ -87,6 +94,7 @@ namespace MicroScribe.App
             RebuildDims();
             RebuildOverlay();
             RebuildToolLayer();
+            RebuildModelLayer();
         }
 
         void BuildGrid(Mat4 M, Vec3 bmin, Vec3 bmax, double diag)
@@ -161,11 +169,17 @@ namespace MicroScribe.App
             bool traced = f.Kind == FeatureKind.Curve || f.Kind == FeatureKind.Surface;
             double pr = _marker * (sel ? 1.15 : 0.85) * (traced ? 0.6 : 1);
             var pts = f.Points.Select(p => M.TransformPoint(p.Position)).ToList();
+            bool byDev = _s.ColorByDeviation && _proj.NominalModel != null && f.Origin == FeatureOrigin.Measured;
+            var bins = byDev ? Enumerable.Range(0, 5).Select(i => new MeshBuilder()).ToArray() : null;
             for (int i = 0; i < f.Points.Count; i++)
             {
                 if (f.Points[i].Excluded) exc.Sphere(pts[i], pr * 0.8, 8, 6);
+                else if (byDev) bins[DevBin(PointDeviation(f, f.Points[i]))].Sphere(pts[i], pr, 8, 6);
                 else inc.Sphere(pts[i], pr, 8, 6);
             }
+            if (byDev)
+                for (int b = 0; b < 5; b++)
+                    if (bins[b].VertexCount > 0) { var m = SceneView.Model(bins[b], Materials.Solid(DevColors[b])); group.Children.Add(m); tags[m] = ptTag; }
             if (inc.VertexCount > 0) { var m = SceneView.Model(inc, Materials.Solid(sel ? Lighter(c, 0.35) : c)); group.Children.Add(m); tags[m] = ptTag; }
             if (exc.VertexCount > 0) { var m = SceneView.Model(exc, Materials.Solid(Color.FromRgb(120, 120, 120))); group.Children.Add(m); tags[m] = ptTag; }
 

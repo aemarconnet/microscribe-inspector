@@ -64,6 +64,25 @@ namespace MicroScribe.App
 
     public sealed partial class MainWindow
     {
+        /// <summary>Binary STL of a box 0..L × 0..W × 0..H (outward triangles).</summary>
+        static void WriteBoxStl(string path, double L, double W, double H)
+        {
+            Vec3[] v = { new Vec3(0, 0, 0), new Vec3(L, 0, 0), new Vec3(L, W, 0), new Vec3(0, W, 0), new Vec3(0, 0, H), new Vec3(L, 0, H), new Vec3(L, W, H), new Vec3(0, W, H) };
+            int[][] quads = { new[] { 0, 3, 2, 1 }, new[] { 4, 5, 6, 7 }, new[] { 0, 1, 5, 4 }, new[] { 3, 7, 6, 2 }, new[] { 0, 4, 7, 3 }, new[] { 1, 2, 6, 5 } };
+            using (var w = new BinaryWriter(File.Create(path)))
+            {
+                w.Write(new byte[80]);
+                w.Write((uint)12);
+                foreach (var q in quads)
+                    foreach (var tri in new[] { new[] { q[0], q[1], q[2] }, new[] { q[0], q[2], q[3] } })
+                    {
+                        for (int k = 0; k < 3; k++) w.Write(0f);
+                        foreach (int i in tri) { w.Write((float)v[i].X); w.Write((float)v[i].Y); w.Write((float)v[i].Z); }
+                        w.Write((ushort)0);
+                    }
+            }
+        }
+
         /// <summary>Hidden "/selftest dir" mode: drives the UI, writes screenshots + exports, then exits.</summary>
         public void RunSelfTest(string dir)
         {
@@ -215,6 +234,27 @@ namespace MicroScribe.App
             });
             steps.Add(() => shot("09-arm-check"));
             steps.Add(() => { ToggleCheck(CheckMode.SinglePoint); _tabs.SelectedIndex = 0; });
+
+            // nominal model: the demo block as STL in part coordinates, best fit over three faces, profile
+            steps.Add(() =>
+            {
+                string stl = Path.Combine(dir, "block.stl");
+                WriteBoxStl(stl, 120, 80, 30);
+                LoadModel(stl, 1, true);
+                Mat4 before = _proj.AlignmentMatrix;
+                BestFitToModel(new List<Feature> { F("Top 1"), F("Front"), F("Left") });
+                check("model fit: " + _proj.AlignmentRecipe.ModelNote);
+                Vec3 shift = _proj.AlignmentMatrix.TransformPoint(Vec3.Zero) - before.TransformPoint(Vec3.Zero);
+                check(string.Format(Ui.CI, "part frame moved by {0:0.000} {1:0.000} {2:0.000} mm", shift.X, shift.Y, shift.Z));
+                SetTool(Tool.Profile); PickEntity(new EntityRef { FeatureId = F("Top 1").Id }); SetTool(Tool.Select);
+                var pd = _proj.Dimensions.Last();
+                check(DimText(pd, DimensionSolver.Evaluate(_proj, pd)));
+                _s.ColorByDeviation = true; _s.DeviationRange = 0.05;
+                _tabs.SelectedIndex = 2;
+                RebuildAll(); _view.SetView("iso"); FitFeatures();
+            });
+            steps.Add(() => shot("10-model"));
+            steps.Add(() => { _s.ColorByDeviation = false; _proj.NominalModel = null; _proj.ModelPath = ""; _tabs.SelectedIndex = 0; RebuildAll(); });
 
             steps.Add(() =>
             {

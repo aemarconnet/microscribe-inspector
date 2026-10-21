@@ -455,6 +455,7 @@ namespace MicroScribe.App
             tb(Tool.Angularity, "∠ Angularity", "Angularity of a plane or axis to a datum, at a nominal angle");
             tb(Tool.Position, "⌖ Position", "Position of a hole, pin or point against its nominal (part frame)");
             tb(Tool.Coaxial, "◎ Coaxial", "Coaxiality of an axis to a datum axis");
+            tb(Tool.Profile, "Profile", "Deviation zone of a feature's points from the nominal model (Alignment tab)");
             tools.Children.Add(tw);
             tools.Children.Add(Ui.Text("Values are tolerance-zone widths from the least-squares fit of the compensated points. The part coordinate system (Alignment tab) is the datum reference frame for Position.", 11, null, Ui.Muted));
             p.Children.Add(Ui.Card(tools));
@@ -608,6 +609,7 @@ namespace MicroScribe.App
             if (p == null) return;
             p.Children.Clear();
             var r = _proj.AlignmentRecipe;
+            p.Children.Add(Ui.Card(ModelCard()));
 
             // --- orientation
             var o = new StackPanel();
@@ -621,6 +623,7 @@ namespace MicroScribe.App
             o.Children.Add(orb("Machine axes (arm base)", OrientationMode.Machine));
             o.Children.Add(orb("From features (3-2-1: primary → Z, secondary → X)", OrientationMode.Features));
             o.Children.Add(orb("Principal axes of the measured points (auto)", OrientationMode.PrincipalAxes));
+            if (r.ModelMatrix != null) o.Children.Add(orb("Fitted to the nominal model (see above)", OrientationMode.Model));
             if (r.Orientation == OrientationMode.Features)
             {
                 Func<Feature, bool> hasDir = x => x.Geometry != null && !(x.Geometry is CurvePrim) && !(x.Geometry is SurfacePrim) && Constructions.Direction(x.Geometry).HasValue;
@@ -653,6 +656,8 @@ namespace MicroScribe.App
             // --- origin
             var g = new StackPanel();
             g.Children.Add(Ui.Header("2 · ORIGIN (centre or corner the part)"));
+            if (r.Orientation == OrientationMode.Model)
+                g.Children.Add(Ui.Text("Not used while the part frame is fitted to the model: the model's own origin and axes apply (rotations too).", 11.5, null, Brushes.DarkOrange));
             Func<string, OriginMode, RadioButton> grb = (t, m) =>
             {
                 var rb = new RadioButton { Content = t, IsChecked = r.Origin == m, Margin = new Thickness(0, 2, 0, 2), GroupName = "origin" };
@@ -1032,6 +1037,8 @@ namespace MicroScribe.App
                 _proj = ProjectIO.Load(path);
                 _projPath = path; _dirty = false; _active = null; _selected = null; _selectedDim = 0;
                 _s.AddRecent(path);
+                LoadProjectModel();
+                _dirty = false;
                 SetTool(Tool.Select);
                 UpdatePrompt();
                 RebuildAll();

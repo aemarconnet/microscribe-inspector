@@ -16,6 +16,109 @@ namespace MicroScribe.Tests
         {
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("tolerances: pass/fail, positions, report, XML", TestTolerances));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("GD&T: form, orientation, position, coaxiality", TestGdt));
+            Program.ExtraTests.Add(new KeyValuePair<string, Action>("nominal model: STL, distances, pairs, best fit, profile", TestModel));
+        }
+
+        /// <summary>Box 0..L × 0..W × 0..H as outward-facing triangles.</summary>
+        static List<Vec3> Box(double L, double W, double H)
+        {
+            Vec3[] v = { new Vec3(0, 0, 0), new Vec3(L, 0, 0), new Vec3(L, W, 0), new Vec3(0, W, 0), new Vec3(0, 0, H), new Vec3(L, 0, H), new Vec3(L, W, H), new Vec3(0, W, H) };
+            int[][] quads = { new[] { 0, 3, 2, 1 }, new[] { 4, 5, 6, 7 }, new[] { 0, 1, 5, 4 }, new[] { 3, 7, 6, 2 }, new[] { 0, 4, 7, 3 }, new[] { 1, 2, 6, 5 } };
+            var c = new List<Vec3>();
+            foreach (var q in quads) { c.Add(v[q[0]]); c.Add(v[q[1]]); c.Add(v[q[2]]); c.Add(v[q[0]]); c.Add(v[q[2]]); c.Add(v[q[3]]); }
+            return c;
+        }
+
+        static void WriteBinaryStl(string path, List<Vec3> corners)
+        {
+            using (var w = new BinaryWriter(File.Create(path)))
+            {
+                w.Write(new byte[80]);
+                w.Write((uint)(corners.Count / 3));
+                for (int i = 0; i < corners.Count; i += 3)
+                {
+                    for (int k = 0; k < 3; k++) w.Write(0f);
+                    for (int j = 0; j < 3; j++) { w.Write((float)corners[i + j].X); w.Write((float)corners[i + j].Y); w.Write((float)corners[i + j].Z); }
+                    w.Write((ushort)0);
+                }
+            }
+        }
+
+        static Mat4 RotZ(double a, double tx, double ty, double tz)
+        {
+            var m = Mat4.Identity();
+            m[0, 0] = Math.Cos(a); m[0, 1] = -Math.Sin(a); m[1, 0] = Math.Sin(a); m[1, 1] = Math.Cos(a);
+            m[0, 3] = tx; m[1, 3] = ty; m[2, 3] = tz;
+            return m;
+        }
+
+        static void TestModel()
+        {
+            var corners = Box(100, 60, 30);
+            string bin = Path.Combine(Path.GetTempPath(), "msinspector_box.stl"), asc = Path.Combine(Path.GetTempPath(), "msinspector_box_ascii.stl");
+            WriteBinaryStl(bin, corners);
+            var sb = new System.Text.StringBuilder("solid box\n");
+            for (int i = 0; i < corners.Count; i += 3)
+            {
+                sb.Append(" facet normal 0 0 0\n  outer loop\n");
+                for (int j = 0; j < 3; j++) sb.AppendFormat(System.Globalization.CultureInfo.InvariantCulture, "   vertex {0} {1} {2}\n", corners[i + j].X / 25.4, corners[i + j].Y / 25.4, corners[i + j].Z / 25.4);
+                sb.Append("  endloop\n endfacet\n");
+            }
+            sb.Append("endsolid box\n");
+            File.WriteAllText(asc, sb.ToString());
+            var mesh = TriMesh.LoadStl(bin);
+            var inch = TriMesh.LoadStl(asc, 25.4);
+            Check(mesh.TriangleCount == 12 && mesh.V.Length == 8, "binary STL: {0} triangles, {1} vertices", mesh.TriangleCount, mesh.V.Length);
+            Check(inch.TriangleCount == 12 && (inch.Max - new Vec3(100, 60, 30)).Length < 1e-4, "ASCII STL in inches");
+            Check(Math.Abs(mesh.SignedDistance(new Vec3(50, 30, 40)) - 10) < 1e-9, "10 above the top");
+            Check(Math.Abs(mesh.SignedDistance(new Vec3(50, 30, 15)) + 15) < 1e-9, "15 inside");
+            Check(Math.Abs(mesh.SignedDistance(new Vec3(-3, -4, 15)) - 5) < 1e-9, "5 off an edge");
+            // inside-out exports are turned the right way round
+            var flipped = new List<Vec3>();
+            for (int i = 0; i < corners.Count; i += 3) { flipped.Add(corners[i]); flipped.Add(corners[i + 2]); flipped.Add(corners[i + 1]); }
+            Check(TriMesh.FromCorners(flipped).SignedDistance(new Vec3(50, 30, 40)) > 0, "inverted normals are corrected");
+
+            // the part sits on the table turned 30° and moved: machine = truth⁻¹ · model
+            Mat4 truth = RotZ(30 * Math.PI / 180, -250, 80, 12);          // machine → model
+            Mat4 toMachine = truth.RigidInverse();
+            var modelPts = new[] { new Vec3(0, 0, 30), new Vec3(100, 0, 30), new Vec3(100, 60, 30), new Vec3(0, 60, 0) };
+            double rms;
+            var pairs = ModelFit.FromPairs(modelPts.Select(toMachine.TransformPoint).ToList(), modelPts, out rms);
+            Check(rms < 1e-9 && (pairs.TransformPoint(toMachine.TransformPoint(new Vec3(5, 6, 7))) - new Vec3(5, 6, 7)).Length < 1e-9, "point pairs recover the transform (rms {0})", rms);
+
+            // ball centres (r = 1.5) on five faces, then a best fit from a start that is 1° and 2 mm off
+            var rng = new Random(11);
+            var centres = new List<Vec3>(); var radii = new List<double>();
+            Action<Func<double, double, Vec3>, Vec3, int> face = (at, n, k) =>
+            {
+                for (int i = 0; i < k; i++) { centres.Add(toMachine.TransformPoint(at(rng.NextDouble(), rng.NextDouble()) + n * 1.5)); radii.Add(1.5); }
+            };
+            face((u, v) => new Vec3(5 + 90 * u, 5 + 50 * v, 30), Vec3.UnitZ, 30);
+            face((u, v) => new Vec3(5 + 90 * u, 0, 3 + 24 * v), -Vec3.UnitY, 15);
+            face((u, v) => new Vec3(0, 5 + 50 * u, 3 + 24 * v), -Vec3.UnitX, 15);
+            face((u, v) => new Vec3(100, 5 + 50 * u, 3 + 24 * v), Vec3.UnitX, 10);
+            face((u, v) => new Vec3(5 + 90 * u, 60, 3 + 24 * v), Vec3.UnitY, 10);
+            Mat4 start = RotZ(1 * Math.PI / 180, 2, -1.5, 0.8) * truth;
+            var fit = ModelFit.BestFit(mesh, centres, radii, start);
+            Check(fit != null && fit.Rms < 1e-6, "best fit rms {0}", fit != null ? fit.Rms : double.NaN);
+            double err = new[] { new Vec3(0, 0, 0), new Vec3(100, 60, 30) }.Max(q => (fit.Transform.TransformPoint(toMachine.TransformPoint(q)) - q).Length);
+            Check(err < 1e-4, "best fit recovers the part position ({0})", err);
+
+            // profile of the top face with one point 0.05 high → zone 0.1
+            var p = new Project { NominalModel = mesh };
+            p.AlignmentMatrix = truth;
+            var top = p.NewFeature(FeatureKind.Plane);
+            for (int i = 0; i < 12; i++)
+            {
+                Vec3 s = new Vec3(10 + 7 * i, 10 + 3 * i, 30 + (i == 4 ? 0.05 : 0) + 1.5);
+                top.Points.Add(new MeasuredPoint(toMachine.TransformPoint(s), toMachine.TransformVector(-Vec3.UnitZ), 1.5));
+            }
+            FeatureSolver.Solve(p, top);
+            var prof = new Dimension { Kind = DimKind.Profile, Refs = { new EntityRef { FeatureId = top.Id } } };
+            var pr = DimensionSolver.Evaluate(p, prof);
+            Check(pr.Ok && Math.Abs(pr.Value - 0.1) < 1e-6, "profile {0} ({1})", pr.Value, pr.Error);
+            p.NominalModel = null;
+            Check(!DimensionSolver.Evaluate(p, prof).Ok, "profile needs a model");
         }
 
         static Feature Pts(Project p, FeatureKind k, IEnumerable<Vec3> pts, Func<Vec3, Vec3> dir = null)

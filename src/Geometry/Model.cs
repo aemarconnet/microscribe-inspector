@@ -99,6 +99,10 @@ namespace MicroScribe.Model
         public string Notes = "";
         public List<Dimension> Dimensions = new List<Dimension>();
         public int NextDimId = 1;
+        /// <summary>Nominal CAD model (STL, in part coordinates): file and mm per file unit.</summary>
+        public string ModelPath = "";
+        public double ModelScale = 1;
+        [XmlIgnore] public TriMesh NominalModel;
 
         [XmlIgnore]
         public Mat4 AlignmentMatrix

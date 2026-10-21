@@ -8,7 +8,7 @@ using MicroScribe.Geometry;
 namespace MicroScribe.Model
 {
     /// <summary>Measurements; Form and later kinds are geometric tolerances (see Gdt).</summary>
-    public enum DimKind { Distance, Angle, Diameter, Coordinate, Form, Parallelism, Perpendicularity, Angularity, Position, Coaxiality }
+    public enum DimKind { Distance, Angle, Diameter, Coordinate, Form, Parallelism, Perpendicularity, Angularity, Position, Coaxiality, Profile }
 
     /// <summary>Reference to a feature, or to one probed point of a feature (PointIndex ≥ 0).</summary>
     public sealed class EntityRef

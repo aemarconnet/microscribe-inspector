@@ -22,6 +22,8 @@ namespace MicroScribe.App
         public string Handle;
         public int HandleIndex;
         public int DimId;
+        /// <summary>The nominal model surface (picked while choosing model points).</summary>
+        public bool Model;
         public bool Draggable { get { return Handle != null; } }
     }
 
@@ -49,7 +51,7 @@ namespace MicroScribe.App
         readonly Dictionary<string, List<Label3D>> _layerLabels = new Dictionary<string, List<Label3D>>();
         // Opaque layers first, translucent layers last: WPF writes translucent surfaces into the depth
         // buffer, so anything drawn after them and behind them would disappear.
-        static readonly string[] LayerOrder = { "grid", "features", "work", "dims", "overlay", "handles", "tool", "live", "surfaces", "workfill", "gridalpha" };
+        static readonly string[] LayerOrder = { "grid", "features", "work", "dims", "overlay", "handles", "tool", "live", "model", "surfaces", "workfill", "gridalpha" };
 
         Vec3 _target = new Vec3(0, 0, 0);
         double _yaw = -0.9, _pitch = 0.55, _dist = 900;

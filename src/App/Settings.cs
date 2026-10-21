@@ -99,6 +99,10 @@ namespace MicroScribe.App
         public int ArmCheckIntervalDays = 30;
         public List<ArmCheckRecord> ArmChecks = new List<ArmCheckRecord>();
         public double QualifyReference = 25.4;
+        /// <summary>Nominal model display and deviation colours (green within ±DeviationRange).</summary>
+        public bool ShowModel = true;
+        public bool ColorByDeviation;
+        public double DeviationRange = 0.25;
         public double CurveSpacing = 1.0;    // mm between points while scanning a curve
         public double DefaultExportMargin = 2.0;
         public bool ShowArm = true;

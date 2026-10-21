@@ -6,7 +6,7 @@ using MicroScribe.Geometry;
 
 namespace MicroScribe.Model
 {
-    public enum OrientationMode { Machine, Features, PrincipalAxes }
+    public enum OrientationMode { Machine, Features, PrincipalAxes, Model }
     public enum OriginMode { Keep, Feature, BoundingBox }
     public enum Anchor { Min, Center, Max }
 
@@ -28,6 +28,9 @@ namespace MicroScribe.Model
         /// <summary>Features used for the bounding box (empty = all measured features).</summary>
         public List<int> BoxFeatureIds = new List<int>();
         public double OffsetX, OffsetY, OffsetZ;
+        /// <summary>Model mode: machine → model transform from point pairs or a best fit (row-major 16).</summary>
+        public double[] ModelMatrix;
+        public string ModelNote = "";
 
         public string Describe(Project p)
         {
@@ -38,6 +41,7 @@ namespace MicroScribe.Model
                 case OrientationMode.Features:
                     o = "Z: " + N(PrimaryId) + (SecondaryId != 0 ? ", X: " + N(SecondaryId) : ""); break;
                 case OrientationMode.PrincipalAxes: o = "principal axes"; break;
+                case OrientationMode.Model: return "fitted to the nominal model" + (string.IsNullOrEmpty(ModelNote) ? "" : " (" + ModelNote + ")");
                 default: o = "machine axes"; break;
             }
             if (TurnsX != 0 || TurnsY != 0 || TurnsZ != 0) o += string.Format(" +rot({0},{1},{2})×90°", TurnsX, TurnsY, TurnsZ);
@@ -98,6 +102,13 @@ namespace MicroScribe.Model
         {
             error = null;
             Mat4 m = Mat4.Identity();
+            if (r.Orientation == OrientationMode.Model)
+            {
+                // the model's own coordinates are the part frame: no turns or origin changes
+                if (r.ModelMatrix != null && r.ModelMatrix.Length == 16) Array.Copy(r.ModelMatrix, m.M, 16);
+                else error = "Align to the model first";
+                return m;
+            }
             if (r.Orientation == OrientationMode.Features)
             {
                 var prim = p.Find(r.PrimaryId);
@@ -139,6 +150,7 @@ namespace MicroScribe.Model
             var pts = BoxPoints(p, r).Select(q => m.TransformPoint(q)).ToList();
             Bounds(pts, out boxMin, out boxMax);
             Vec3 anchor = Vec3.Zero;
+            if (r.Orientation == OrientationMode.Model) return m;
             if (r.Origin == OriginMode.BoundingBox && pts.Count > 0)
             {
                 anchor = new Vec3(Pick(r.AnchorX, boxMin.X, boxMax.X), Pick(r.AnchorY, boxMin.Y, boxMax.Y), Pick(r.AnchorZ, boxMin.Z, boxMax.Z));

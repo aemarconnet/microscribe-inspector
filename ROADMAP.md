@@ -31,9 +31,9 @@ Effort: **S** small · **M** medium · **L** large.
 7. [x] **Basic GD&T** (M–L) — flatness, straightness, roundness, cylindricity, parallelism,
    perpendicularity, angularity, position, coaxiality; the part coordinate system as the datum
    reference frame; optional minimum-zone evaluation next to least squares.
-8. [ ] **Nominal model import** (L) — STL first: display, best-fit and 3-2-1 alignment to the model,
-   live stylus-to-model deviation, deviation colour map, comparison points, profile of a surface.
-   STEP import later.
+8. [x] **Nominal model import** (L) — STL: display, point-pair and best-fit alignment to the model,
+   live stylus-to-model deviation, points coloured by deviation, profile of a surface or of
+   comparison points. (STEP import of the nominal model is a later addition.)
 9. [ ] **Report with pictures** (M) — HTML/PDF with 3D snapshots, tables, pass/fail, logo and part,
    serial and operator fields; CSV of results per part.
 10. [ ] **Inspection plans: learn and replay** (L) — record the feature sequence with nominals,
