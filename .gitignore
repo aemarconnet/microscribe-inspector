@@ -1,0 +1,13 @@
+# Third-party software, manuals and personal notes kept locally: never publish
+MicroScribe-3DX Software/
+
+# Build output (publish dist zips as GitHub Release assets instead)
+bin/
+dist/
+*.pdb
+
+# Local settings and hardware logs (contain the arm's serial number)
+*.settings.xml
+portable.flag
+probe-logs/
+*.tmp
