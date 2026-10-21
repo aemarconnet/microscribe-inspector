@@ -177,6 +177,148 @@ namespace MicroScribe.Export
             return string.Format("{0} surface bodies, {1} reference items", surfaces, wires);
         }
 
+        /// <summary>Writes an IGES file (mm): surfaces as exact B-spline surfaces, curves, axes, centres, points.</summary>
+        public static string WriteIges(Project proj, string path, ExportOptions opt, string software)
+        {
+            Mat4 m = opt.UsePartAlignment ? proj.AlignmentMatrix : Mat4.Identity();
+            var w = new IgesWriter();
+            int surfaces = 0;
+            foreach (var f in proj.Features.Where(x => x.Export))
+            {
+                var g = GeoUtil.Transform(f.Geometry, m);
+                if (g == null) continue;
+                var pts = ActivePositions(f, m);
+                double margin = f.ExportMargin;
+                if (g is CurvePrim)
+                {
+                    var c = (CurvePrim)g;
+                    w.AddCurve(f.Name, Math.Max(1, c.Degree), c.Ctrl, null, c.Knots, c.Closed);
+                }
+                else if (g is SurfacePrim && opt.Surfaces)
+                {
+                    var s = (SurfacePrim)g;
+                    w.AddSurface(f.Name, s.DegU, s.DegV, s.Ctrl, null, s.KnotsU, s.KnotsV);
+                    surfaces++;
+                }
+                else if (g is PlanePrim && opt.Surfaces)
+                {
+                    var c = PlaneBounds.Corners(f, (PlanePrim)f.Geometry).Select(m.TransformPoint).ToArray();
+                    var net = new Vec3[2, 2]; net[0, 0] = c[0]; net[1, 0] = c[1]; net[0, 1] = c[3]; net[1, 1] = c[2];
+                    w.AddSurface(f.Name, 1, 1, net, null, new double[] { 0, 0, 1, 1 }, new double[] { 0, 0, 1, 1 });
+                    surfaces++;
+                }
+                else if ((g is CylinderPrim || g is ConePrim) && opt.Surfaces)
+                {
+                    var cy = g as CylinderPrim; var co = g as ConePrim;
+                    Vec3 o = cy != null ? cy.AxisPoint : co.AxisPoint, ax = cy != null ? cy.Axis : co.Axis;
+                    Vec3 xr; double t0, t1, h0, h1;
+                    RevolvedExtent(o, ax, pts, margin, f.FullRevolution, out xr, out t0, out t1, out h0, out h1, cy != null ? cy.Radius : co.RadiusAtOrigin);
+                    if (co != null)
+                    {
+                        // stop at the apex
+                        double hApex = Math.Abs(Math.Tan(co.HalfAngle)) > 1e-9 ? -co.RadiusAtOrigin / Math.Tan(co.HalfAngle) : double.NaN;
+                        if (!double.IsNaN(hApex)) { if (hApex < (h0 + h1) / 2) h0 = Math.Max(h0, hApex); else h1 = Math.Min(h1, hApex); }
+                    }
+                    Func<double, double> rad = h => cy != null ? cy.Radius : Math.Max(0, co.RadiusAt(h));
+                    w.AddRevolved(f.Name, o, ax, xr, rad, t0, t1, h0, h1);
+                    surfaces++;
+                    if (opt.ReferenceGeometry) w.AddLine(f.Name + " axis", o + ax * h0, o + ax * h1);
+                }
+                else if (g is SpherePrim && opt.Surfaces)
+                {
+                    var s = (SpherePrim)g;
+                    Vec3 pole; double cap;
+                    SphereCap(s, pts, margin, out pole, out cap);
+                    w.AddSphere(f.Name, s.Center, s.Radius, pole, cap);
+                    surfaces++;
+                    if (opt.ReferenceGeometry) w.AddPoint(f.Name + " center", s.Center);
+                }
+                else if (g is ProfilePrim)
+                {
+                    var pp = (ProfilePrim)g;
+                    var outline = pp.Outline();
+                    w.AddCurve(f.Name, 1, outline, null, Spline.ClampedUniform(outline.Count, 1, CurvePrim.ChordParams(outline)), true, pp.Normal);
+                    w.AddPoint(f.Name + " center", pp.Center);
+                }
+                else if (g is CloudPrim) foreach (var q in ((CloudPrim)g).Points) w.AddPoint(f.Name, q);
+                if (opt.ReferenceGeometry)
+                {
+                    if (g is PointPrim) w.AddPoint(f.Name, ((PointPrim)g).Position);
+                    else if (g is LinePrim) { var l = (LinePrim)g; w.AddLine(f.Name, l.Origin + l.Direction * (l.TMin - margin), l.Origin + l.Direction * (l.TMax + margin)); }
+                    else if (g is CirclePrim) { var c = (CirclePrim)g; w.AddCircle(f.Name, c.Center, c.Normal, c.Radius); w.AddPoint(f.Name + " center", c.Center); }
+                }
+                if (opt.MeasuredPoints && !(g is CloudPrim))
+                    foreach (var q in FeatureSolver.ContactPoints(f, f.ActivePoints.ToList())) w.AddPoint(f.Name, m.TransformPoint(q));
+            }
+            w.Write(path, opt.Author, "", software);
+            return string.Format("{0} surfaces, {1} entities", surfaces, w.Count);
+        }
+
+        /// <summary>Binary STL of all exported surfaces (mm, part frame unless told otherwise). Returns the triangle count.</summary>
+        public static int WriteStl(Project proj, string path, ExportOptions opt)
+        {
+            Mat4 m = opt.UsePartAlignment ? proj.AlignmentMatrix : Mat4.Identity();
+            var tri = new List<Vec3>();
+            Action<Func<double, double, Vec3>, int, int, bool> grid = (S, nu, nv, flip) =>
+            {
+                for (int i = 0; i < nu; i++)
+                    for (int j = 0; j < nv; j++)
+                    {
+                        Vec3 a = S((double)i / nu, (double)j / nv), b = S((double)(i + 1) / nu, (double)j / nv), c = S((double)(i + 1) / nu, (double)(j + 1) / nv), d = S((double)i / nu, (double)(j + 1) / nv);
+                        if (flip) { tri.Add(a); tri.Add(c); tri.Add(b); tri.Add(a); tri.Add(d); tri.Add(c); }
+                        else { tri.Add(a); tri.Add(b); tri.Add(c); tri.Add(a); tri.Add(c); tri.Add(d); }
+                    }
+            };
+            foreach (var f in proj.Features.Where(x => x.Export && x.Geometry != null))
+            {
+                var g = GeoUtil.Transform(f.Geometry, m);
+                var pts = ActivePositions(f, m);
+                bool inside = IsInternal(f);
+                if (g is SurfacePrim) { var s = (SurfacePrim)g; grid((u, v) => s.Evaluate(u, v), 64, 64, false); }
+                else if (g is PlanePrim)
+                {
+                    var c = PlaneBounds.Corners(f, (PlanePrim)f.Geometry).Select(m.TransformPoint).ToArray();
+                    grid((u, v) => c[0] + (c[1] - c[0]) * u + (c[3] - c[0]) * v, 1, 1, false);
+                }
+                else if (g is CylinderPrim || g is ConePrim)
+                {
+                    var cy = g as CylinderPrim; var co = g as ConePrim;
+                    Vec3 o = cy != null ? cy.AxisPoint : co.AxisPoint, z = (cy != null ? cy.Axis : co.Axis).Normalized();
+                    Vec3 xr; double t0, t1, h0, h1;
+                    RevolvedExtent(o, z, pts, f.ExportMargin, f.FullRevolution, out xr, out t0, out t1, out h0, out h1, cy != null ? cy.Radius : co.RadiusAtOrigin);
+                    Vec3 x = (xr - z * xr.Dot(z)).Normalized(), y = z.Cross(x);
+                    Func<double, double> rad = h => cy != null ? cy.Radius : Math.Max(0, co.RadiusAt(h));
+                    int nu = Math.Max(8, (int)Math.Ceiling((t1 - t0) / (4 * Math.PI / 180)));
+                    grid((u, v) => { double t = t0 + (t1 - t0) * u, h = h0 + (h1 - h0) * v; return o + z * h + (x * Math.Cos(t) + y * Math.Sin(t)) * rad(h); }, nu, 1, inside);
+                }
+                else if (g is SpherePrim)
+                {
+                    var s = (SpherePrim)g;
+                    Vec3 pole; double cap;
+                    SphereCap(s, pts, f.ExportMargin, out pole, out cap);
+                    Vec3 z = pole.Normalized(), x = z.AnyPerpendicular(), y = z.Cross(x);
+                    grid((u, v) => { double t = 2 * Math.PI * u, ph = cap * v; return s.Center + (z * Math.Cos(ph) + (x * Math.Cos(t) + y * Math.Sin(t)) * Math.Sin(ph)) * s.Radius; }, 72, 24, !inside);
+                }
+            }
+            using (var bw = new BinaryWriter(File.Create(path)))
+            {
+                var head = new byte[80];
+                var txt = System.Text.Encoding.ASCII.GetBytes("MicroScribe Inspector surfaces (mm)");
+                Array.Copy(txt, head, Math.Min(80, txt.Length));
+                bw.Write(head);
+                bw.Write((uint)(tri.Count / 3));
+                for (int i = 0; i < tri.Count; i += 3)
+                {
+                    Vec3 n = (tri[i + 1] - tri[i]).Cross(tri[i + 2] - tri[i]);
+                    n = n.Length > 1e-15 ? n.Normalized() : Vec3.Zero;
+                    bw.Write((float)n.X); bw.Write((float)n.Y); bw.Write((float)n.Z);
+                    for (int k = 0; k < 3; k++) { bw.Write((float)tri[i + k].X); bw.Write((float)tri[i + k].Y); bw.Write((float)tri[i + k].Z); }
+                    bw.Write((ushort)0);
+                }
+            }
+            return tri.Count / 3;
+        }
+
         public static void SphereCap(SpherePrim s, IList<Vec3> pts, double margin, out Vec3 pole, out double cap)
         {
             pole = Vec3.Zero;

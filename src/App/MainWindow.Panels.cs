@@ -1212,6 +1212,34 @@ namespace MicroScribe.App
             catch (Exception ex) { MessageBox.Show(this, "Export failed: " + ex.Message, "Export", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
 
+        void ExportIges()
+        {
+            if (_active != null) FinishMeasure(true);
+            if (!_proj.Features.Any(f => f.Export && f.Geometry != null)) { Status("Nothing to export yet"); return; }
+            string path = ExportPath(".igs", "IGES (*.igs;*.iges)|*.igs;*.iges");
+            if (path == null) return;
+            try
+            {
+                string summary = CadExport.WriteIges(_proj, path, new ExportOptions { Author = _s.Author, UsePartAlignment = true },
+                    Installer.AppName + " " + typeof(MainWindow).Assembly.GetName().Version.ToString(3));
+                Status("Exported " + path + " — " + summary + " (millimetres; surfaces as untrimmed B-spline surfaces)");
+            }
+            catch (Exception ex) { MessageBox.Show(this, "Export failed: " + ex.Message, "Export", MessageBoxButton.OK, MessageBoxImage.Error); }
+        }
+
+        void ExportStl()
+        {
+            if (_active != null) FinishMeasure(true);
+            string path = ExportPath(".stl", "STL mesh (*.stl)|*.stl");
+            if (path == null) return;
+            try
+            {
+                int n = CadExport.WriteStl(_proj, path, new ExportOptions { UsePartAlignment = true });
+                Status(n == 0 ? "No surfaces to export" : string.Format("Exported {0}: {1:N0} triangles (millimetres, part frame)", System.IO.Path.GetFileName(path), n));
+            }
+            catch (Exception ex) { MessageBox.Show(this, "Export failed: " + ex.Message, "Export", MessageBoxButton.OK, MessageBoxImage.Error); }
+        }
+
         void ExportPoints(string kind)
         {
             string path = kind == "csv" ? ExportPath(".csv", "CSV (*.csv)|*.csv") : ExportPath(".xyz", "XYZ point cloud (*.xyz;*.txt)|*.xyz;*.txt");

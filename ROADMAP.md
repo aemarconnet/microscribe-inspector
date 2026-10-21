@@ -55,7 +55,8 @@ Effort: **S** small · **M** medium · **L** large.
     circle), mirror.
 15. [x] **Constrained fits** (M) — fixed diameter or cone angle, forced parallel/perpendicular to a
     datum.
-16. [ ] **More export formats** (M) — IGES, STL mesh of freeform surfaces, DXF; results as QIF/DMIS.
+16. [x] **More export formats** (M) — IGES (exact B-spline surfaces and curves), STL mesh of the
+    surfaces, DXF (2D sketches, item 12).
 
 ## Phase 4 — Larger parts and conditions
 
@@ -66,6 +67,8 @@ Effort: **S** small · **M** medium · **L** large.
 19. [ ] **Faster sampling** (S) — 115200 baud for denser scans (needs a hardware test).
 
 ## Ongoing
+
+- [ ] Results as QIF / DMIS for quality-management systems (needs a consumer to validate against)
 
 - [ ] Confirm STEP import in SolidWorks, Fusion, FreeCAD and Onshape; publish example files
 - [ ] Test reports from other serial MicroScribe models (DH1.0 parameter format, 6-axis stylus)

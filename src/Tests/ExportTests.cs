@@ -18,6 +18,7 @@ namespace MicroScribe.Tests
         {
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("bounding-box corner/centre alignment", TestAnchors));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("probe compensation", TestCompensation));
+            Program.ExtraTests.Add(new KeyValuePair<string, Action>("IGES (exact arcs, structure) and STL export", TestIgesStl));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("spline interpolation", TestSpline));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("STEP export structure", TestStep));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("project XML round-trip", TestXml));
@@ -50,6 +51,69 @@ namespace MicroScribe.Tests
             }
             FeatureSolver.SolveAll(p);
             return p;
+        }
+
+        static void TestIgesStl()
+        {
+            // rational arcs lie exactly on the circle
+            double[] ax, ay, aw, kn;
+            Nurbs.Arc(0.3, 0.3 + 1.5 * Math.PI, out ax, out ay, out aw, out kn);
+            var hom = ax.Select((x, i) => new Vec3(x * aw[i], ay[i] * aw[i], aw[i])).ToArray();
+            for (int i = 0; i <= 50; i++)
+            {
+                var h = Spline.Evaluate(2, hom, kn, i / 50.0);
+                double r = Math.Sqrt(h.X * h.X + h.Y * h.Y) / h.Z;
+                Program.Check(Math.Abs(r - 1) < 1e-12, "arc radius {0} at {1}", r, i);
+            }
+            var e = Spline.Evaluate(2, hom, kn, 1.0);
+            Program.Check(Math.Abs(Math.Atan2(e.Y / e.Z, e.X / e.Z) - (0.3 + 1.5 * Math.PI - 2 * Math.PI)) < 1e-12, "arc end angle");
+
+            Mat4 truth;
+            var p = DemoBlock(out truth);
+            string iges = Path.Combine(Path.GetTempPath(), "msinspector_test.igs");
+            string summary = CadExport.WriteIges(p, iges, new ExportOptions(), "MicroScribe Inspector test");
+            var lines = File.ReadAllLines(iges);
+            Program.Check(lines.All(l => l.Length == 80), "every IGES line is 80 columns");
+            Program.Check(lines.Last()[72] == 'T' && lines.First()[72] == 'S', "start and terminate sections");
+            int nD = lines.Count(l => l[72] == 'D'), nP = lines.Count(l => l[72] == 'P');
+            Program.Check(lines.Last().StartsWith(string.Format("S{0:D7}G{1:D7}D{2:D7}P{3:D7}", lines.Count(l => l[72] == 'S'), lines.Count(l => l[72] == 'G'), nD, nP)), "terminate counts");
+            // gather each entity's parameters through its directory pointer and check the sizes
+            var byDe = lines.Where(l => l[72] == 'P').GroupBy(l => int.Parse(l.Substring(65, 7).Trim())).ToDictionary(gr => gr.Key, gr => string.Concat(gr.Select(l => l.Substring(0, 64).TrimEnd())));
+            Program.Check(byDe.Count == nD / 2 && byDe.Keys.All(k => k % 2 == 1 && k < nD), "directory pointers");
+            int surfaces = 0;
+            foreach (var kv in byDe)
+            {
+                var tok = kv.Value.TrimEnd(';').Split(',');
+                int type = int.Parse(tok[0]);
+                if (type == 128)
+                {
+                    int k1 = int.Parse(tok[1]), k2 = int.Parse(tok[2]), m1 = int.Parse(tok[3]), m2 = int.Parse(tok[4]);
+                    int expect = 10 + (k1 + m1 + 2) + (k2 + m2 + 2) + 4 * (k1 + 1) * (k2 + 1) + 4;
+                    Program.Check(tok.Length == expect, "128 entity has {0} values, expected {1}", tok.Length, expect);
+                    surfaces++;
+                }
+                if (type == 126)
+                {
+                    int k = int.Parse(tok[1]), m = int.Parse(tok[2]);
+                    Program.Check(tok.Length == 7 + (k + m + 2) + 4 * (k + 1) + 5, "126 entity size");
+                }
+            }
+            Program.Check(surfaces >= 4 && summary.StartsWith(surfaces + " surfaces"), "IGES surfaces {0} ({1})", surfaces, summary);
+            string stl = Path.Combine(Path.GetTempPath(), "msinspector_test.stl");
+            int n = CadExport.WriteStl(p, stl, new ExportOptions());
+            Program.Check(n > 100 && new FileInfo(stl).Length == 84 + 50L * n, "STL with {0} triangles", n);
+            var back = TriMesh.LoadStl(stl);
+            Program.Check(back.TriangleCount > 100, "STL reads back ({0} triangles)", back.TriangleCount);
+            // the AABB tree finds the same nearest triangle as checking them all
+            var rng = new Random(8);
+            for (int k = 0; k < 40; k++)
+            {
+                Vec3 q = back.Min + new Vec3(rng.NextDouble() * (back.Max.X - back.Min.X), rng.NextDouble() * (back.Max.Y - back.Min.Y), rng.NextDouble() * (back.Max.Z - back.Min.Z)) * 1.2 - (back.Max - back.Min) * 0.1;
+                double brute = double.MaxValue;
+                for (int i = 0; i < back.TriangleCount; i++)
+                    brute = Math.Min(brute, (TriMesh.ClosestOnTriangle(q, back.V[back.T[3 * i]], back.V[back.T[3 * i + 1]], back.V[back.T[3 * i + 2]]) - q).Length);
+                Program.Check(Math.Abs(Math.Abs(back.SignedDistance(q)) - brute) < 1e-9, "tree vs brute force at {0}", k);
+            }
         }
 
         static void TestAnchors()

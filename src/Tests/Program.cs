@@ -44,7 +44,12 @@ namespace MicroScribe.Tests
         static void Run(string name, Action t)
         {
             try { t(); Console.WriteLine("PASS  " + name); _pass++; }
-            catch (Exception ex) { Console.WriteLine("FAIL  " + name + ": " + ex.Message); _fail++; }
+            catch (Exception ex)
+            {
+                // checks explain themselves; unexpected exceptions also say where they came from
+                string where = ex.StackTrace != null && !(ex.TargetSite != null && ex.TargetSite.Name == "Check") ? "  [" + ex.StackTrace.Split('\n')[0].Trim() + "]" : "";
+                Console.WriteLine("FAIL  " + name + ": " + ex.Message + where); _fail++;
+            }
         }
 
         public static void Check(bool cond, string msg, params object[] a)

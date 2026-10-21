@@ -141,8 +141,11 @@ namespace MicroScribe.Geometry
             Vec3 ext = hi - lo;
             int axis = ext.X > ext.Y ? (ext.X > ext.Z ? 0 : 2) : (ext.Y > ext.Z ? 1 : 2);
             var keys = new double[count];
-            for (int i = 0; i < count; i++) { Vec3 c = cen[_order[start + i]]; keys[i] = axis == 0 ? c.X : axis == 1 ? c.Y : c.Z; }
-            Array.Sort(keys, _order, start, count);
+            var idx = new int[count];
+            Array.Copy(_order, start, idx, 0, count);
+            for (int i = 0; i < count; i++) { Vec3 c = cen[idx[i]]; keys[i] = axis == 0 ? c.X : axis == 1 ? c.Y : c.Z; }
+            Array.Sort(keys, idx);
+            Array.Copy(idx, 0, _order, start, count);
             int half = count / 2;
             node.L = Build(cen, start, half);
             node.R = Build(cen, start + half, count - half);

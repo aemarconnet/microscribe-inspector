@@ -267,6 +267,8 @@ namespace MicroScribe.App
             {
                 string step = Path.Combine(dir, "demo.step");
                 log.Add("STEP: " + CadExport.WriteStep(_proj, step, new ExportOptions()));
+                log.Add("IGES: " + CadExport.WriteIges(_proj, Path.Combine(dir, "demo.igs"), new ExportOptions(), "MicroScribe Inspector self-test"));
+                log.Add("STL: " + CadExport.WriteStl(_proj, Path.Combine(dir, "demo.stl"), new ExportOptions()) + " triangles");
                 File.WriteAllText(Path.Combine(dir, "report.txt"), CadExport.Report(_proj, true, Fmt, CapabilityLine()));
                 File.WriteAllText(Path.Combine(dir, "report.html"), HtmlReport.Build(_proj, Fmt, ReportHeader(),
                     new[] { new KeyValuePair<string, byte[]>("3D view", SnapshotView()) }), new System.Text.UTF8Encoding(false));
