@@ -199,6 +199,13 @@ namespace MicroScribe.App
                 check("curve spline: " + string.Join(" | ", CadExport.Describe(c.Geometry, c, Fmt)));
             });
             steps.Add(() => shot("07-curve-spline"));
+            steps.Add(() =>
+            {
+                var c = F("Top front edge");
+                var sk = SketchOf(c);
+                check(string.Format("sketch of {0}: {1} lines, {2} arcs, max deviation {3}", c.Name, sk.Lines, sk.Arcs, Ui.LU(sk.MaxDeviation)));
+                File.WriteAllText(Path.Combine(dir, "edge.dxf"), sk.ToDxf(false));
+            });
 
             // work area: sketch a polygon on the table by clicking, set the height, Fit
             steps.Add(() => { _tabs.SelectedIndex = 4; SetTool(Tool.SketchArea); });

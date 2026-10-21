@@ -11,8 +11,8 @@ using System.Windows.Threading;
 [assembly: AssemblyProduct("MicroScribe Inspector")]
 [assembly: AssemblyCompany("Marconnet Technologies")]
 [assembly: AssemblyCopyright("Copyright © 2026 Marconnet Technologies")]
-[assembly: AssemblyVersion("1.7.0.0")]
-[assembly: AssemblyFileVersion("1.7.0.0")]
+[assembly: AssemblyVersion("1.8.0.0")]
+[assembly: AssemblyFileVersion("1.8.0.0")]
 
 namespace MicroScribe.App
 {

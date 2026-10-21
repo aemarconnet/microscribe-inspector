@@ -44,7 +44,7 @@ Effort: **S** small · **M** medium · **L** large.
 
 11. [x] **More hard-probe scan modes** (M) — fixed time, section planes (a point each time the stylus
     crosses parallel planes at a set spacing) and free point-cloud scanning with filtering.
-12. [ ] **2D sketch from a probed profile** (M) — project onto a plane, split into lines and arcs,
+12. [x] **2D sketch from a probed profile** (M) — project onto a plane, split into lines and arcs,
     export DXF and SolidWorks curve files.
 13. [ ] **More feature types** (M) — round and square slot, rectangle, ellipse, torus (fillets),
     width / keyway, edge and vector points for sheet metal.

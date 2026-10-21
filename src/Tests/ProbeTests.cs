@@ -18,6 +18,39 @@ namespace MicroScribe.Tests
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("probe qualification on a reference sphere", TestQualification));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("arm check statistics + stillness", TestArmCheck));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("scan modes, section-plane surface, point clouds", TestScans));
+            Program.ExtraTests.Add(new KeyValuePair<string, Action>("2D sketch: lines and arcs, sharp corners, DXF", TestSketch));
+        }
+
+        static void TestSketch()
+        {
+            // closed profile at z = 5: bottom line, R10 half circle, top line, left line (traced every 0.5 mm)
+            var pts = new List<Vec3>();
+            Action<double, double> add = (x, y) => pts.Add(new Vec3(x, y, 5) + new Vec3(G(0.01), G(0.01), G(0.01)));
+            for (double x = 0; x < 40; x += 0.5) add(x, 0);
+            for (double a = -90; a < 90; a += 3) add(40 + 10 * Math.Cos(a * Math.PI / 180), 10 + 10 * Math.Sin(a * Math.PI / 180));
+            for (double x = 40; x > 0; x -= 0.5) add(x, 20);
+            for (double y = 20; y > 0; y -= 0.5) add(0, y);
+            var plane = new PlanePrim { Origin = new Vec3(0, 0, 5), Normal = Vec3.UnitZ };
+            var sk = Sketch2D.Build(pts, plane, Mat4.Identity(), 0.1, true);
+            Check(sk.Lines == 3 && sk.Arcs == 1, "{0} lines, {1} arcs", sk.Lines, sk.Arcs);
+            Check(sk.MaxDeviation < 0.1, "max deviation {0}", sk.MaxDeviation);
+            var arc = sk.Segments.First(s => s.IsArc);
+            Check(Math.Abs(arc.R - 10) < 0.1 && Math.Abs(arc.CX - 40) < 0.1 && Math.Abs(arc.CY - 10) < 0.1 && arc.Ccw, "arc R{0} at {1},{2}", arc.R, arc.CX, arc.CY);
+            // the start corner is the intersection of the first and last lines; pieces join end to start
+            var first = sk.Segments[0];
+            Check(Math.Abs(first.X0) < 0.03 && Math.Abs(first.Y0) < 0.03, "corner at {0},{1}", first.X0, first.Y0);
+            for (int i = 0; i < sk.Segments.Count; i++)
+            {
+                var a = sk.Segments[i]; var b = sk.Segments[(i + 1) % sk.Segments.Count];
+                Check(Math.Abs(a.X1 - b.X0) < 1e-9 && Math.Abs(a.Y1 - b.Y0) < 1e-9, "pieces {0} and {1} meet", i, i + 1);
+            }
+            Check(Math.Abs(Math.Sqrt((arc.X0 - arc.CX) * (arc.X0 - arc.CX) + (arc.Y0 - arc.CY) * (arc.Y0 - arc.CY)) - arc.R) < 1e-9, "arc passes through its end points");
+            string dxf = sk.ToDxf(false);
+            Check(System.Text.RegularExpressions.Regex.Matches(dxf, "\r\nLINE\r\n").Count == 3 && System.Text.RegularExpressions.Regex.Matches(dxf, "\r\nARC\r\n").Count == 1 && dxf.TrimEnd().EndsWith("EOF"), "DXF entities");
+            // a plane facing part Y sketches in part X/Z
+            Vec3 o, u, v;
+            Sketch2D.Basis(new PlanePrim { Origin = new Vec3(0, 7, 0), Normal = -Vec3.UnitY }, Mat4.Identity(), out o, out u, out v);
+            Check((u - Vec3.UnitX).Length < 1e-9 && (v - Vec3.UnitZ).Length < 1e-9 && (o - new Vec3(0, 7, 0)).Length < 1e-9, "front plane basis");
         }
 
         static void TestScans()

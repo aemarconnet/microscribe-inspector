@@ -60,6 +60,9 @@ namespace MicroScribe.Model
         /// <summary>Spline smoothing: max deviation from the traced points (mm); 0 = pass through every point.</summary>
         public double CurveTolerance = 0.1;
         public bool Closed;
+        /// <summary>2D sketch of a traced profile: plane feature (0 = the curve's own best-fit plane) and fit tolerance (mm).</summary>
+        public int SketchPlaneId;
+        public double SketchTolerance = 0.1;
 
         // --- planes: user-resized rectangle (machine frame), re-projected onto the plane after refits
         public bool CustomBounds;

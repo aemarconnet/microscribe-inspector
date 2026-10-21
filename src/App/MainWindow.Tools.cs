@@ -416,6 +416,7 @@ namespace MicroScribe.App
                 g.Children.Add(SceneView.Model(tp, Materials.Emissive(Color.FromRgb(56, 189, 248))));
             }
             AddGhost(g, labels, M);
+            AddSketchOverlay(g, M);
             if (_modelPts.Count > 0)
             {
                 // model points of a point-pair alignment, numbered; the probed partners in orange

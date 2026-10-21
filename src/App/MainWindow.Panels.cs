@@ -185,7 +185,7 @@ namespace MicroScribe.App
 
             // kind-specific options
             if (f.Kind == FeatureKind.Plane && f.Geometry is PlanePrim) p.Children.Add(Ui.Card(PlaneSizeCard(f)));
-            if (f.Kind == FeatureKind.Curve) p.Children.Add(Ui.Card(CurveCard(f)));
+            if (f.Kind == FeatureKind.Curve) { p.Children.Add(Ui.Card(CurveCard(f))); p.Children.Add(Ui.Card(SketchCard(f))); }
             if (f.Kind == FeatureKind.Surface) p.Children.Add(Ui.Card(SurfaceCard(f)));
 
             // options
