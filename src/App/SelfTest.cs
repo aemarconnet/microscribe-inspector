@@ -261,6 +261,8 @@ namespace MicroScribe.App
                 string step = Path.Combine(dir, "demo.step");
                 log.Add("STEP: " + CadExport.WriteStep(_proj, step, new ExportOptions()));
                 File.WriteAllText(Path.Combine(dir, "report.txt"), CadExport.Report(_proj, true, Fmt, CapabilityLine()));
+                File.WriteAllText(Path.Combine(dir, "report.html"), HtmlReport.Build(_proj, Fmt, ReportHeader(),
+                    new[] { new KeyValuePair<string, byte[]>("3D view", SnapshotView()) }), new System.Text.UTF8Encoding(false));
                 ProjectIO.Save(_proj, Path.Combine(dir, "demo.msproj"));
                 try { Sounds.Dump(Path.Combine(dir, "sounds")); } catch (Exception ex) { log.Add("sounds: " + ex.Message); }
                 foreach (var f in _proj.Features) log.Add(f.Name + ": " + Summary(f, false));

@@ -101,6 +101,8 @@ namespace MicroScribe.Model
         public int NextDimId = 1;
         /// <summary>Nominal CAD model (STL, in part coordinates): file and mm per file unit.</summary>
         public string ModelPath = "";
+        /// <summary>Report header: part number, serial number and operator of this measurement.</summary>
+        public string PartNumber = "", PartSerial = "", Operator = "";
         public double ModelScale = 1;
         [XmlIgnore] public TriMesh NominalModel;
 

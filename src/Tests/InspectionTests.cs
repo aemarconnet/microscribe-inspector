@@ -17,6 +17,38 @@ namespace MicroScribe.Tests
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("tolerances: pass/fail, positions, report, XML", TestTolerances));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("GD&T: form, orientation, position, coaxiality", TestGdt));
             Program.ExtraTests.Add(new KeyValuePair<string, Action>("nominal model: STL, distances, pairs, best fit, profile", TestModel));
+            Program.ExtraTests.Add(new KeyValuePair<string, Action>("HTML report and results log", TestReport));
+        }
+
+        static void TestReport()
+        {
+            var p = new Project { Title = "Bracket <rev A>" };
+            var a = Plane(p, 0); var b = Plane(p, 10);
+            var pt = p.NewFeature(FeatureKind.Point);
+            pt.Points.Add(new MeasuredPoint(new Vec3(1, 2, 3), -Vec3.UnitZ, 0));
+            FeatureSolver.SolveAll(p);
+            p.Dimensions.Add(new Dimension { Id = 1, Kind = DimKind.Distance, Name = "Height", Toleranced = true, Nominal = 10, TolPlus = 0.1, TolMinus = -0.1,
+                Refs = { new EntityRef { FeatureId = a.Id }, new EntityRef { FeatureId = b.Id } } });
+            p.Dimensions.Add(new Dimension { Id = 2, Kind = DimKind.Coordinate, Name = "Hole", Toleranced = true, NX = 1, NY = 2, NZ = 3.5, TolPlus = 0.1, TolMinus = -0.1,
+                Refs = { new EntityRef { FeatureId = pt.Id } } });
+            p.Dimensions.Add(new Dimension { Id = 3, Kind = DimKind.Form, Name = "Flat", Refs = { new EntityRef { FeatureId = a.Id } } });
+            var rows = Results.Rows(p);
+            Check(rows.Count == 5, "rows {0}", rows.Count);
+            Check(rows[0].Status == TolStatus.Pass && rows.Count(r => r.Status == TolStatus.Fail) == 1 && rows[3].Characteristic.StartsWith("Z") && rows[3].Status == TolStatus.Fail, "row statuses");
+            Check(rows[4].IsZone && rows[4].Status == TolStatus.None, "untoleranced form row");
+            var info = new ReportInfo { PartNumber = "PN-42", Serial = "S001", Operator = "QA" };
+            string html = HtmlReport.Build(p, new UnitFmt(false), info, new[] { new KeyValuePair<string, byte[]>("view", new byte[] { 137, 80, 78, 71 }) });
+            Check(html.Contains("FAIL — 1 of 4 toleranced"), "banner");
+            Check(html.Contains("Bracket &lt;rev A&gt;") && !html.Contains("<rev A>"), "title is escaped");
+            Check(html.Contains("data:image/png;base64,iVBORw") && html.Contains("PN-42") && html.Contains("class=\"st PASS\">PASS"), "image, header and status cells");
+            string log = Path.Combine(Path.GetTempPath(), "msinspector_log.csv");
+            if (File.Exists(log)) File.Delete(log);
+            Results.AppendCsv(log, p, info, new UnitFmt(false));
+            info.Serial = "S002";
+            Results.AppendCsv(log, p, info, new UnitFmt(false));
+            var lines = File.ReadAllLines(log);
+            Check(lines.Length == 11 && lines[0].StartsWith("date,project,part_number") && lines.Count(l => l.Contains("\"S002\"")) == 5, "results log has one header and 10 rows ({0})", lines.Length);
+            Check(lines[1].Contains(",10.000,0.100,-0.100,10.000,0.000,PASS"), "log row: {0}", lines[1]);
         }
 
         /// <summary>Box 0..L × 0..W × 0..H as outward-facing triangles.</summary>

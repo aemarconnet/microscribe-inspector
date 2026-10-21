@@ -1112,15 +1112,6 @@ namespace MicroScribe.App
             Status("Exported " + path + " (" + (Ui.Inch ? "inches" : "millimetres") + ")");
         }
 
-        void ExportReport()
-        {
-            string path = ExportPath(".txt", "Text report (*.txt)|*.txt");
-            if (path == null) return;
-            File.WriteAllText(path, CadExport.Report(_proj, true, Fmt, CapabilityLine()));
-            Status("Report written to " + path);
-            try { System.Diagnostics.Process.Start(path); } catch { }
-        }
-
         void DeleteSelected()
         {
             var f = _selected;

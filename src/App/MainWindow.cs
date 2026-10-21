@@ -148,7 +148,8 @@ namespace MicroScribe.App
             item(file, "Export _STEP (surfaces + reference geometry)...", "Ctrl+E", ExportStep);
             item(file, "Export points CSV...", "", () => ExportPoints("csv"));
             item(file, "Export point cloud XYZ (ScanTo3D / curve through points)...", "", () => ExportPoints("xyz"));
-            item(file, "Inspection report...", "", ExportReport);
+            item(file, "Inspection report (HTML / text)...", "", ExportReport);
+            item(file, "Append results to log (CSV)...", "", AppendResultsLog);
             file.Items.Add(new Separator());
             item(file, "E_xit", "Alt+F4", Close);
 

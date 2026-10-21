@@ -34,8 +34,8 @@ Effort: **S** small · **M** medium · **L** large.
 8. [x] **Nominal model import** (L) — STL: display, point-pair and best-fit alignment to the model,
    live stylus-to-model deviation, points coloured by deviation, profile of a surface or of
    comparison points. (STEP import of the nominal model is a later addition.)
-9. [ ] **Report with pictures** (M) — HTML/PDF with 3D snapshots, tables, pass/fail, logo and part,
-   serial and operator fields; CSV of results per part.
+9. [x] **Report with pictures** (M) — HTML (print to PDF from the browser) with a 3D snapshot,
+   tables, pass/fail, logo and part, serial and operator fields; CSV results log per part.
 10. [ ] **Inspection plans: learn and replay** (L) — record the feature sequence with nominals,
     prompts and pictures, then guide the operator through the next part step by step; results per
     part feed simple SPC (trend, Cp/Cpk).

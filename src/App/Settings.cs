@@ -103,6 +103,8 @@ namespace MicroScribe.App
         public bool ShowModel = true;
         public bool ColorByDeviation;
         public double DeviationRange = 0.25;
+        /// <summary>Report header and the CSV results log.</summary>
+        public string ReportCompany = "", ReportLogoPath = "", ResultsLogPath = "";
         public double CurveSpacing = 1.0;    // mm between points while scanning a curve
         public double DefaultExportMargin = 2.0;
         public bool ShowArm = true;
