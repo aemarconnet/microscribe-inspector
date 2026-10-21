@@ -126,5 +126,11 @@ manufacturer software, firmware, manuals or material copied from them — see [L
 
 ## License
 
-© 2026 Marconnet Technologies — released under the [MIT license](LICENSE). MicroScribe is a
-trademark of its respective owner and is used here only to describe compatibility.
+© 2026 Marconnet Technologies.
+
+* **Source code:** [MIT license](LICENSE) — free to use, modify and redistribute; keep the copyright notice.
+* **Documentation and images** (this README, [LEGAL.md](LEGAL.md), [docs/](docs/) including the screenshots):
+  [Creative Commons Attribution 4.0 (CC BY 4.0)](LICENSE-docs) — free to share and adapt, with credit
+  to "© 2026 Marconnet Technologies, MicroScribe Inspector".
+
+MicroScribe is a trademark of its respective owner and is used here only to describe compatibility.

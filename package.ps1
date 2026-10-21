@@ -17,6 +17,7 @@ Copy-Item (Join-Path $root 'bin\tools\MsProbe.exe') (Join-Path $dir 'tools')
 Copy-Item (Join-Path $root 'docs\*') (Join-Path $dir 'docs') -Recurse
 Copy-Item (Join-Path $root 'README.md') (Join-Path $dir 'docs\README.md')
 Copy-Item (Join-Path $root 'LICENSE') (Join-Path $dir 'LICENSE.txt')
+Copy-Item (Join-Path $root 'LICENSE-docs') (Join-Path $dir 'LICENSE-docs.txt')
 Copy-Item (Join-Path $root 'LEGAL.md') (Join-Path $dir 'docs\LEGAL.md')
 Set-Content -Path (Join-Path $dir 'Install for this user.cmd') -Encoding ASCII -Value "@echo off`r`n""%~dp0MicroScribeInspector.exe"" /install /desktop`r`n"
 $zip = Join-Path $dist ("MicroScribeInspector-$ver-portable.zip")

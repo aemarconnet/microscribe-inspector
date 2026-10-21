@@ -1,6 +1,7 @@
 # Legal notice
 
-MicroScribe Inspector — © 2026 Marconnet Technologies, released under the [MIT license](LICENSE).
+MicroScribe Inspector — © 2026 Marconnet Technologies. Source code under the [MIT license](LICENSE);
+documentation and images under [CC BY 4.0](LICENSE-docs).
 
 This file explains how the project is put together so that users and contributors can judge it for
 themselves. **It is not legal advice.**

@@ -1,5 +1,7 @@
 # MicroScribe serial protocol & kinematics
 
+© 2026 Marconnet Technologies — licensed under [CC BY 4.0](../LICENSE-docs).
+
 This document describes the RS-232 protocol spoken by serial MicroScribe digitizers (called "HCI" in
 open-source drivers) and how stylus positions are computed from it, as implemented by MicroScribe
 Inspector. It is written for **interoperability**: so owners of these arms can keep using them.
