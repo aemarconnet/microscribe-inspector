@@ -25,7 +25,11 @@ namespace MicroScribe.App
         bool _scanning;           // curve mode with pedal held
         long _captureStart = -1;  // Stopwatch ticks of a pending averaged capture
         ArmSample _captureSample;
+        Action<Vec3, Vec3> _captureSink;  // receives the averaged point (feature, arm check)
         int _buttons;
+        // hands-free capture: armed until a point is taken, re-armed once the stylus moves away
+        bool _dwellArmed = true;
+        Vec3 _dwellAt, _dwellDir;
 
         // ------------------------------------------------------------------ connection
 
@@ -70,7 +74,7 @@ namespace MicroScribe.App
                         _connectBtn.IsEnabled = true;
                         _statusText.Text = "Connection failed";
                         _ledConn.Fill = Brushes.IndianRed;
-                        MessageBox.Show(this, ex.Message + "\n\nCheck: arm powered on, cable, COM port (" + port + "), and that no other program (MicroScribe Utility) holds the port.",
+                        MessageBox.Show(this, ex.Message + "\n\nCheck: arm powered on, cable, COM port (" + port + "), and that no other program holds the port.",
                             "Connect", MessageBoxButton.OK, MessageBoxImage.Warning);
                         _arm = null;
                         RebuildArmPanel();
@@ -101,6 +105,7 @@ namespace MicroScribe.App
                 case ArmState.Connected:
                     _ledConn.Fill = Brushes.LimeGreen; _connectBtn.Content = "Disconnect"; _statusText.Text = msg;
                     Status("Connected: " + msg);
+                    CheckReminder();
                     break;
                 case ArmState.Connecting: _ledConn.Fill = Brushes.Gold; _statusText.Text = msg; break;
                 case ArmState.Error: _ledConn.Fill = Brushes.OrangeRed; _statusText.Text = msg; Status(msg); break;
@@ -162,20 +167,24 @@ namespace MicroScribe.App
             }
             else if (down)
             {
-                if (act == PedalAction.Finish) { if (!ToolFinish()) FinishMeasure(); }
-                else if (act == PedalAction.Undo) { if (!ToolUndo()) UndoPoint(); }
+                if (act == PedalAction.Finish) { if (!ToolFinish() && !CheckFinish()) FinishMeasure(); }
+                else if (act == PedalAction.Undo) { if (!ToolUndo() && !CheckUndo()) UndoPoint(); }
             }
         }
 
         int _section; // current traced curve of a freeform surface
 
-        /// <summary>Pedal 1 / Space: capture one point (averaged), or start tracing a curve / surface section.</summary>
-        void CapturePressed(ArmSample at = null)
+        /// <summary>
+        /// Pedal 1 / Space: capture one point (averaged), or start tracing a curve / surface section.
+        /// <paramref name="dwell"/>: hands-free capture, <paramref name="at"/> is already averaged.
+        /// </summary>
+        void CapturePressed(ArmSample at = null, bool dwell = false)
         {
             var s = at ?? (_arm != null ? _arm.Latest : null);
             if (s == null) { Status("No arm data — connect the arm or the simulator"); return; }
             if (_pivotActive) { CapturePivot(); return; }
             if (ToolCapture(s)) return;
+            if (_check != CheckMode.None) { Capture(s, at, dwell, CheckCapture); return; }
             if (_active == null)
             {
                 // Quick start: capturing without an active feature starts an Auto feature.
@@ -183,15 +192,23 @@ namespace MicroScribe.App
             }
             if (_active.Kind == FeatureKind.Curve || _active.Kind == FeatureKind.Surface)
             {
+                if (dwell) return; // tracing needs the pedal held
                 // pedal held = trace; each new press on a freeform surface starts a new curve
                 if (_active.Kind == FeatureKind.Surface && at != null && _active.Points.Any(p => p.Section == _section)) _section++;
                 _scanning = at != null; // keyboard: single point; pedal: hold to scan
                 AddPoint(s.Tip, s.Direction, true);
                 return;
             }
-            if (_s.CaptureAverageMs <= 0 || at == null) { AddPoint(s.Tip, s.Direction); return; }
+            Capture(s, at, dwell, (p, d) => AddPoint(p, d));
+        }
+
+        /// <summary>One point for <paramref name="sink"/>: at once (keyboard, hands-free) or averaged after a pedal press.</summary>
+        void Capture(ArmSample s, ArmSample at, bool dwell, Action<Vec3, Vec3> sink)
+        {
+            if (dwell || _s.CaptureAverageMs <= 0 || at == null) { sink(s.Tip, s.Direction); return; }
             _captureStart = s.Timestamp;
             _captureSample = s;
+            _captureSink = sink;
         }
 
         /// <summary>Freeform surface: start the next traced curve (keyboard N).</summary>
@@ -214,10 +231,49 @@ namespace MicroScribe.App
             List<ArmSample> win;
             lock (_histLock) win = _hist.Where(h => h.Timestamp >= _captureStart).ToList();
             _captureStart = -1;
+            var sink = _captureSink ?? ((a, b) => AddPoint(a, b));
+            _captureSink = null;
             if (win.Count == 0) win.Add(_captureSample);
+            double moved = ArmCheck.Movement(win.Select(h => h.Tip).ToList());
+            if (_s.CaptureMotionLimit > 0 && moved > _s.CaptureMotionLimit)
+            {
+                Sounds.Warn();
+                Status(string.Format("Not captured: the stylus moved {0} during the capture — hold it still and press again (limit {1}, Arm & tip tab)",
+                    Ui.LU(moved), Ui.LU(_s.CaptureMotionLimit)));
+                return;
+            }
             Vec3 p = Vec3.Zero, d = Vec3.Zero;
             foreach (var h in win) { p += h.Tip; d += h.Direction; }
-            AddPoint(p / win.Count, d.Normalized());
+            sink(p / win.Count, d.Normalized());
+        }
+
+        /// <summary>
+        /// Hands-free capture: while measuring, holding the stylus still for DwellMs takes a point; the next
+        /// one is taken only after the tip has moved away (or the stylus was swung round, for seat tests).
+        /// </summary>
+        void DwellTick(ArmSample s)
+        {
+            if (_s.DwellMs <= 0 || s == null || _scanning || _captureStart >= 0) return;
+            bool wanted = _pivotActive || _check != CheckMode.None || _tool == Tool.TraceArea || _tool == Tool.ProbeTable
+                || (_active != null && _active.Kind != FeatureKind.Curve && _active.Kind != FeatureKind.Surface);
+            if (!wanted) { _dwellArmed = true; return; }
+            if (!_dwellArmed)
+            {
+                if ((s.Tip - _dwellAt).Length > _s.DwellRearm || Constructions.AngleBetween(s.Direction, _dwellDir, false) > 10 * Math.PI / 180)
+                    _dwellArmed = true;
+                return;
+            }
+            long from = s.Timestamp - (long)(_s.DwellMs / 1000.0 * System.Diagnostics.Stopwatch.Frequency);
+            List<ArmSample> win;
+            lock (_histLock)
+            {
+                if (_hist.Count == 0 || _hist.First.Value.Timestamp > from) return; // not held long enough yet
+                win = _hist.Where(h => h.Timestamp >= from).ToList();
+            }
+            Vec3 tip, dir;
+            if (win.Count < 3 || !ArmCheck.IsStill(win.Select(h => h.Tip).ToList(), win.Select(h => h.Direction).ToList(), _s.DwellRadius, 1.0, out tip, out dir)) return;
+            _dwellArmed = false; _dwellAt = tip; _dwellDir = dir;
+            CapturePressed(new ArmSample { Tip = tip, Direction = dir, StylusFrame = s.StylusFrame, Buttons = s.Buttons, Timestamp = s.Timestamp }, true);
         }
 
         void AddPoint(Vec3 tip, Vec3 dir, bool traced = false)
@@ -371,7 +427,7 @@ namespace MicroScribe.App
 
         void UpdatePrompt()
         {
-            string tp = ToolPrompt();
+            string tp = ToolPrompt() ?? CheckPrompt();
             if (tp != null)
             {
                 _prompt.Text = tp + "     (Esc = stop)";
@@ -409,6 +465,7 @@ namespace MicroScribe.App
             CompleteCapture();
             var s = _arm != null ? _arm.Latest : null;
             ScanTick(s);
+            DwellTick(s);
             bool inch = _s.InchDisplay;
             int buttons = s != null ? s.Buttons : _buttons;
             _led1.Fill = (buttons & 1) != 0 ? Brushes.OrangeRed : Brushes.LightGray;

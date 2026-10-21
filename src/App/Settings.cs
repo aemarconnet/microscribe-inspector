@@ -13,9 +13,26 @@ namespace MicroScribe.App
         public string Name = "Standard point tip";
         public double OffsetX, OffsetY, OffsetZ;   // mm, stylus frame
         public double BallRadius;                  // mm (0 = point tip)
+        /// <summary>Last qualification on a reference sphere (DateTime.MinValue = never).</summary>
+        public DateTime QualifiedOn = DateTime.MinValue;
+        public double QualifiedReference, QualifiedRms, QualifiedFormError;
+        public int QualifiedPoints;
 
         [XmlIgnore] public Vec3 Offset { get { return new Vec3(OffsetX, OffsetY, OffsetZ); } set { OffsetX = value.X; OffsetY = value.Y; OffsetZ = value.Z; } }
+        [XmlIgnore] public bool IsQualified { get { return QualifiedOn > DateTime.MinValue; } }
         public override string ToString() { return Name; }
+    }
+
+    /// <summary>One saved arm check (see ArmCheck): kind "single-point" or "length", values in mm.</summary>
+    public sealed class ArmCheckRecord
+    {
+        public DateTime Date;
+        public string Kind = "single-point";
+        public string Arm = "";
+        public string Tip = "";
+        public int N;
+        public double MaxDeviation, Range, TwoSigma, MeanError, Reference, Limit;
+        public bool Pass;
     }
 
     public enum PedalAction { Capture, Finish, Undo, None }
@@ -70,6 +87,18 @@ namespace MicroScribe.App
         public PedalAction Pedal2 = PedalAction.Finish;
         /// <summary>Average this many milliseconds of samples after a capture press (arm held still).</summary>
         public int CaptureAverageMs = 60;
+        /// <summary>Reject a capture when the stylus moved more than this during the averaging window (mm, 0 = off).</summary>
+        public double CaptureMotionLimit = 0.25;
+        /// <summary>Hands-free capture: stylus held still this long captures a point (ms, 0 = off).</summary>
+        public int DwellMs = 0;
+        public double DwellRadius = 0.2;      // mm the tip may wander while "still"
+        public double DwellRearm = 2.0;       // mm the tip must move away before the next hands-free capture
+        /// <summary>Arm checks: pass/fail limit (mm) and the saved history (newest last).</summary>
+        public double ArmCheckLimit = 0.30;
+        public double ArmCheckReference = 100;
+        public int ArmCheckIntervalDays = 30;
+        public List<ArmCheckRecord> ArmChecks = new List<ArmCheckRecord>();
+        public double QualifyReference = 25.4;
         public double CurveSpacing = 1.0;    // mm between points while scanning a curve
         public double DefaultExportMargin = 2.0;
         public bool ShowArm = true;
@@ -96,6 +125,27 @@ namespace MicroScribe.App
                 var t = Tips.FirstOrDefault(x => x.Name == ActiveTip);
                 if (t == null) { if (Tips.Count == 0) Tips.Add(new TipProfile()); t = Tips[0]; ActiveTip = t.Name; }
                 return t;
+            }
+        }
+
+        /// <summary>Latest saved check of each kind (null when none).</summary>
+        public ArmCheckRecord LatestCheck(string kind)
+        {
+            return ArmChecks.Where(c => c.Kind == kind).OrderBy(c => c.Date).LastOrDefault();
+        }
+
+        /// <summary>
+        /// The arm's demonstrated measuring error (mm) from the latest checks: the larger of the
+        /// single-point maximum deviation and the length-test maximum error. NaN when never checked.
+        /// </summary>
+        [XmlIgnore]
+        public double MeasuringError
+        {
+            get
+            {
+                var a = LatestCheck("single-point"); var b = LatestCheck("length");
+                if (a == null && b == null) return double.NaN;
+                return Math.Max(a != null ? a.MaxDeviation : 0, b != null ? b.MaxDeviation : 0);
             }
         }
 

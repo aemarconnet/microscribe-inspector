@@ -37,6 +37,23 @@ namespace MicroScribe.App
 
         static TextBlock Lbl(string t) { return new TextBlock { Text = t, Width = 130, VerticalAlignment = VerticalAlignment.Center }; }
 
+        /// <summary>How the ball radius was applied, in words.</summary>
+        static string CompensationNote(Feature f)
+        {
+            switch (f.Kind)
+            {
+                case FeatureKind.Plane: return "plane offset";
+                case FeatureKind.Point: return "along the stylus";
+                case FeatureKind.Line: return "along the stylus, perpendicular to the line";
+                case FeatureKind.Surface: return "along the surface normal, on the stylus side";
+                case FeatureKind.Curve:
+                    return f.Compensation == CompensationSide.Auto ? "along the stylus, perpendicular to the curve"
+                         : "in the curve's plane, " + (f.Compensation == CompensationSide.Outside ? "toward" : "away from") + " the enclosed area";
+                default:
+                    return FeatureSolver.IsOutside(f.RawFit, f.ActivePoints.ToList(), f.Compensation) ? "outside / boss" : "inside / bore";
+            }
+        }
+
         // ================================================================== Feature tab
 
         void RebuildFeaturePanel()
@@ -75,10 +92,10 @@ namespace MicroScribe.App
             if (f.Origin == FeatureOrigin.Measured && f.Kind != FeatureKind.Curve && f.Kind != FeatureKind.Surface)
                 foreach (var warn in FitQuality.Warnings(f.Kind, f.RawFit, f.ActivePoints.Select(q => q.Position).ToList()))
                     resCard.Children.Add(Ui.Text("⚠ " + warn, 11.5, null, Brushes.DarkOrange));
-            if (f.RawFit != null && f.Geometry != null && f.ActivePoints.Any(q => q.ProbeRadius > 0) && !(f.Geometry is CurvePrim) && !(f.Geometry is SurfacePrim))
-                resCard.Children.Add(Ui.Text(string.Format("Ball compensation {0} applied ({1}).",
-                    Ui.LU(f.ActivePoints.Average(q => q.ProbeRadius)),
-                    f.Kind == FeatureKind.Plane ? "plane offset" : (FeatureSolver.IsOutside(f.RawFit, f.ActivePoints.ToList(), f.Compensation) ? "outside / boss" : "inside / bore")), 11, null, Ui.Muted));
+            if (f.Origin == FeatureOrigin.Measured && f.RawFit != null && f.Geometry != null && f.ActivePoints.Any(q => q.ProbeRadius > 0))
+                resCard.Children.Add(Ui.Text(f.Compensation == CompensationSide.None
+                    ? "Ball compensation off — results are at the ball centre."
+                    : string.Format("Ball compensation {0} applied ({1}).", Ui.LU(f.ActivePoints.Average(q => q.ProbeRadius)), CompensationNote(f)), 11, null, Ui.Muted));
             p.Children.Add(Ui.Card(resCard, new Thickness(0, 8, 0, 8)));
 
             // kind-specific options
@@ -89,13 +106,19 @@ namespace MicroScribe.App
             // options
             var opt = new StackPanel();
             opt.Children.Add(Ui.Header("OPTIONS"));
-            if (f.Origin == FeatureOrigin.Measured && new[] { FeatureKind.Plane, FeatureKind.Circle, FeatureKind.Cylinder, FeatureKind.Cone, FeatureKind.Sphere }.Contains(f.Kind))
+            if (f.Origin == FeatureOrigin.Measured)
             {
+                // inside/outside only means something for closed shapes and for curves traced against a wall
+                bool sided = f.Kind != FeatureKind.Point && f.Kind != FeatureKind.Line && f.Kind != FeatureKind.Surface;
                 var comp = new ComboBox { Width = 160 };
-                foreach (var v in Enum.GetValues(typeof(CompensationSide))) comp.Items.Add(v);
-                comp.SelectedItem = f.Compensation;
+                foreach (CompensationSide v in Enum.GetValues(typeof(CompensationSide)))
+                    if (sided || v == CompensationSide.Auto || v == CompensationSide.None) comp.Items.Add(v);
+                comp.SelectedItem = comp.Items.Contains(f.Compensation) ? f.Compensation : CompensationSide.Auto;
                 comp.SelectionChanged += (s, e) => { f.Compensation = (CompensationSide)comp.SelectedItem; Changed(); };
                 opt.Children.Add(Ui.Row(Lbl("Ball compensation"), comp));
+                if (f.Kind == FeatureKind.Curve)
+                    opt.Children.Add(Ui.Text("Auto: toward where the stylus points (tracing over a surface). Outside / Inside: within the curve's plane, " +
+                        "for tracing around a boss or inside a pocket with the ball against the wall.", 11, null, Ui.Muted));
             }
             if (f.Kind == FeatureKind.Circle)
             {
@@ -785,10 +808,24 @@ namespace MicroScribe.App
             _pivotText = Ui.Text(_pivotActive ? _pivotFrames.Count + " poses captured (pedal 1 / Space captures while active)" : "", 12);
             pc.Children.Add(_pivotText);
             p.Children.Add(Ui.Card(pc));
+            p.Children.Add(Ui.Card(QualifyCard()));
+            p.Children.Add(Ui.Card(ArmCheckCard()));
 
             var cs = new StackPanel();
             cs.Children.Add(Ui.Header("CAPTURE & PEDALS"));
             cs.Children.Add(Ui.Row(Lbl("Average after press (ms)"), Ui.NumBox(_s.CaptureAverageMs, v => _s.CaptureAverageMs = (int)Math.Max(0, Math.Min(1000, v)))));
+            cs.Children.Add(Ui.Row(Lbl("Reject if moved over"), Ui.LenBox(_s.CaptureMotionLimit, v => _s.CaptureMotionLimit = Math.Max(0, v)), Ui.UnitLabel(),
+                Ui.Text("  during the average (0 = off)", 11, null, Ui.Muted)));
+            var dwell = new CheckBox { Content = "Hands-free: capture when the stylus is held still", IsChecked = _s.DwellMs > 0, Margin = new Thickness(0, 6, 0, 2) };
+            dwell.Click += (s, e) => { _s.DwellMs = dwell.IsChecked == true ? 800 : 0; RebuildArmPanel(); };
+            cs.Children.Add(dwell);
+            if (_s.DwellMs > 0)
+            {
+                cs.Children.Add(Ui.Row(Lbl("Hold still for (ms)"), Ui.NumBox(_s.DwellMs, v => _s.DwellMs = (int)Math.Max(200, Math.Min(5000, v)))));
+                cs.Children.Add(Ui.Row(Lbl("Still within"), Ui.LenBox(_s.DwellRadius, v => _s.DwellRadius = Math.Max(0.02, v)), Ui.UnitLabel()));
+                cs.Children.Add(Ui.Row(Lbl("Next after moving"), Ui.LenBox(_s.DwellRearm, v => _s.DwellRearm = Math.Max(0.1, v)), Ui.UnitLabel()));
+                cs.Children.Add(Ui.Text("Only while measuring a feature, calibrating or checking. Traced curves still use the pedal.", 11, null, Ui.Muted));
+            }
             cs.Children.Add(Ui.Row(Lbl("Curve point spacing"), Ui.LenBox(_s.CurveSpacing, v => _s.CurveSpacing = Math.Max(0.05, v)), Ui.UnitLabel()));
             cs.Children.Add(Ui.Row(Lbl("Default margin"), Ui.LenBox(_s.DefaultExportMargin, v => _s.DefaultExportMargin = Math.Max(0, v)), Ui.UnitLabel()));
             Func<PedalAction, Action<PedalAction>, ComboBox> pedal = (cur, set) =>
@@ -952,7 +989,7 @@ namespace MicroScribe.App
         {
             string path = ExportPath(".txt", "Text report (*.txt)|*.txt");
             if (path == null) return;
-            File.WriteAllText(path, CadExport.Report(_proj, true, Fmt));
+            File.WriteAllText(path, CadExport.Report(_proj, true, Fmt, CapabilityLine()));
             Status("Report written to " + path);
             try { System.Diagnostics.Process.Start(path); } catch { }
         }

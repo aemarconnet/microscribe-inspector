@@ -173,11 +173,26 @@ namespace MicroScribe.App
             });
             steps.Add(() => shot("08-workarea-fit"));
 
+            // arm check: single-point readings through the capture sink (not saved to the settings)
+            steps.Add(() =>
+            {
+                _tabs.SelectedIndex = 3;
+                ToggleCheck(CheckMode.SinglePoint);
+                var rng = new Random(7);
+                for (int i = 0; i < 12; i++)
+                    CheckCapture(new Vec3(300, 40, 20) + new Vec3(rng.NextDouble() - 0.5, rng.NextDouble() - 0.5, rng.NextDouble() - 0.5) * 0.12, -Vec3.UnitZ);
+                check("single-point test: " + _checkText.Text);
+                UpdateLayout();
+                _checkText.BringIntoView();
+            });
+            steps.Add(() => shot("09-arm-check"));
+            steps.Add(() => { ToggleCheck(CheckMode.SinglePoint); _tabs.SelectedIndex = 0; });
+
             steps.Add(() =>
             {
                 string step = Path.Combine(dir, "demo.step");
                 log.Add("STEP: " + CadExport.WriteStep(_proj, step, new ExportOptions()));
-                File.WriteAllText(Path.Combine(dir, "report.txt"), CadExport.Report(_proj, true, Fmt));
+                File.WriteAllText(Path.Combine(dir, "report.txt"), CadExport.Report(_proj, true, Fmt, CapabilityLine()));
                 ProjectIO.Save(_proj, Path.Combine(dir, "demo.msproj"));
                 try { Sounds.Dump(Path.Combine(dir, "sounds")); } catch (Exception ex) { log.Add("sounds: " + ex.Message); }
                 foreach (var f in _proj.Features) log.Add(f.Name + ": " + Summary(f, false));

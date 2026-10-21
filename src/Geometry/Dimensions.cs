@@ -51,7 +51,7 @@ namespace MicroScribe.Model
             {
                 if (r.PointIndex >= f.Points.Count) return null;
                 name = f.Name + " pt " + (r.PointIndex + 1);
-                return new PointPrim { Position = f.Points[r.PointIndex].Position };
+                return new PointPrim { Position = FeatureSolver.ContactPoint(f, f.Points[r.PointIndex]) };
             }
             name = f.Name;
             return f.Geometry;

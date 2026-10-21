@@ -23,12 +23,13 @@ software at all.
 | Area | What you get |
 |---|---|
 | Driver | Own implementation of the arm's serial protocol: sign-on/autobaud, identification, reading the arm's stored calibration, encoder resolution, foot pedals, re-home, recovery after cable glitches. Read-only — it never writes to the arm's memory. |
-| Measuring | Point, line, plane, circle, cylinder, cone, sphere, traced curve, **freeform surface** (trace several curves), and auto-detect. Averaged captures, per-point residuals, outlier exclusion, live deviation of the stylus from the selected feature. |
+| Measuring | Point, line, plane, circle, cylinder, cone, sphere, traced curve, **freeform surface** (trace several curves), and auto-detect. Averaged captures that are rejected if the stylus moved, optional hands-free capture (hold the stylus still), per-point residuals, outlier exclusion, live deviation of the stylus from the selected feature. |
 | Feedback | A cheerful chime when a point fits, an arpeggio when a feature finishes cleanly, a low tone when a point is off the fit. |
 | Curves | Smoothed spline (within a tolerance) or linear polyline; open or closed. |
 | Freeform | Traced curves are skinned into a B-spline surface and exported as a STEP B-spline face. |
 | Fitting | Orthogonal least squares (Levenberg–Marquardt), robust axis search for cylinders and cones, form error and RMS, warnings for badly distributed points. |
-| Probes | Tip profiles with ball radius and offset, automatic inside/outside ball compensation, pivot calibration for custom styli. |
+| Probes | Tip profiles with ball radius and offset, ball compensation for every feature type (including traced curves and freeform surfaces), pivot calibration for custom styli, qualification on a reference sphere. |
+| Arm check | Single-point articulation test in a cone seat and a length test on a known bar, with history, pass/fail against your limit and the resulting measuring capability in reports. |
 | Measure tools | Click features or single probed points in the 3D view: distance (with ΔX/ΔY/ΔZ and gaps), angle (features or three points), diameter, position. Results stay as labelled dimensions and go into the report. |
 | Planes | Resize by dragging handles or typing a size; extend or trim to another plane so faces meet for knitting. |
 | Alignment | 3-2-1 from features or principal axes, 90° turns, origin at a feature or at any bounding-box corner, face centre or centre (clickable handles). |
@@ -113,15 +114,15 @@ docs/           PROTOCOL.md and screenshots
 
 ## Roadmap
 
-Planned next steps — contributions welcome:
+The full plan, in the order it is worked on, is in [ROADMAP.md](ROADMAP.md). In short — contributions welcome:
 
-- [ ] Confirm STEP import in SolidWorks, Fusion, FreeCAD and Onshape; publish example files
-- [ ] Test reports from other serial MicroScribe models (DH1.0 parameter format, 6-axis stylus)
-- [ ] SpaceMouse: per-axis tuning presets
-- [ ] IGES export
-- [ ] Tolerance checks against nominal values (pass/fail report)
-- [ ] Combine measurements from several arm positions ("leapfrog")
-- [ ] Localisation (German, French, Spanish…)
+1. **Trustworthy numbers** — ball compensation everywhere, movement check and hands-free capture,
+   probe qualification on a reference sphere, an arm check (articulation and length tests).
+2. **Inspection against nominal values** — tolerances and pass/fail, basic GD&T, STL nominal model
+   with deviation colour map, reports with pictures, learn-and-replay inspection plans with SPC.
+3. **Capture and digitizing to CAD** — more scan modes, 2D sketches to DXF, slots and other
+   feature types, more constructions, constrained fits, IGES / STL / DXF export.
+4. **Larger parts** — leapfrog, temperature correction, faster sampling.
 
 ## Contributing
 

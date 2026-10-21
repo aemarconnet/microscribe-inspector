@@ -590,10 +590,11 @@ namespace MicroScribe.App
             switch (e.Key)
             {
                 case Key.Space: CapturePressed(); e.Handled = true; break;
-                case Key.Enter: if (!ToolFinish()) FinishMeasure(); e.Handled = true; break;
-                case Key.Back: if (!ToolUndo()) UndoPoint(); e.Handled = true; break;
+                case Key.Enter: if (!ToolFinish() && !CheckFinish()) FinishMeasure(); e.Handled = true; break;
+                case Key.Back: if (!ToolUndo() && !CheckUndo()) UndoPoint(); e.Handled = true; break;
                 case Key.Escape:
                     if (_tool != Tool.Select) SetTool(Tool.Select);
+                    else if (_check != CheckMode.None) ToggleCheck(_check);
                     else CancelMeasure();
                     e.Handled = true; break;
                 case Key.Delete:

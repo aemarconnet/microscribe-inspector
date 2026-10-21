@@ -156,7 +156,7 @@ namespace MicroScribe.Export
                 if (opt.MeasuredPoints)
                 {
                     int k = 1;
-                    foreach (var p in pts) { w.AddPoint(f.Name + " pt" + (k++), p); wires++; }
+                    foreach (var p in FeatureSolver.ContactPoints(f, f.ActivePoints.ToList())) { w.AddPoint(f.Name + " pt" + (k++), m.TransformPoint(p)); wires++; }
                 }
             }
             w.Write(path, string.IsNullOrEmpty(proj.Title) ? "MicroScribe" : proj.Title);
@@ -181,41 +181,47 @@ namespace MicroScribe.Export
             return !FeatureSolver.IsOutside(f.RawFit, f.ActivePoints.ToList(), f.Compensation);
         }
 
-        /// <summary>All points as CSV (feature, index, x, y, z, i, j, k, probe radius) in the chosen units.</summary>
+        /// <summary>
+        /// All points as CSV in the chosen units: ball centre (x, y, z), stylus direction, probe radius and
+        /// the compensated contact point on the part (cx, cy, cz).
+        /// </summary>
         public static void WriteCsv(Project proj, string path, bool partFrame, UnitFmt u)
         {
             Mat4 m = partFrame ? proj.AlignmentMatrix : Mat4.Identity();
             var sb = new StringBuilder();
-            sb.AppendLine(string.Format("feature,type,index,section,x_{0},y_{0},z_{0},stylus_i,stylus_j,stylus_k,probe_radius_{0},excluded", u.U));
+            sb.AppendLine(string.Format("feature,type,index,section,x_{0},y_{0},z_{0},stylus_i,stylus_j,stylus_k,probe_radius_{0},excluded,cx_{0},cy_{0},cz_{0}", u.U));
             foreach (var f in proj.Features)
             {
                 int k = 1;
-                foreach (var p in f.Points)
+                var contact = FeatureSolver.ContactPoints(f, f.Points);
+                for (int i = 0; i < f.Points.Count; i++)
                 {
-                    Vec3 q = m.TransformPoint(p.Position), d = m.TransformVector(p.Direction);
-                    sb.AppendLine(string.Format(CI, "\"{0}\",{1},{2},{3},{4},{5},{6},{7:0.000000},{8:0.000000},{9:0.000000},{10},{11}",
-                        f.Name.Replace("\"", "'"), f.Kind, k++, p.Section, u.L(q.X), u.L(q.Y), u.L(q.Z), d.X, d.Y, d.Z, u.L(p.ProbeRadius), p.Excluded ? 1 : 0));
+                    var p = f.Points[i];
+                    Vec3 q = m.TransformPoint(p.Position), d = m.TransformVector(p.Direction), c = m.TransformPoint(contact[i]);
+                    sb.AppendLine(string.Format(CI, "\"{0}\",{1},{2},{3},{4},{5},{6},{7:0.000000},{8:0.000000},{9:0.000000},{10},{11},{12},{13},{14}",
+                        f.Name.Replace("\"", "'"), f.Kind, k++, p.Section, u.L(q.X), u.L(q.Y), u.L(q.Z), d.X, d.Y, d.Z, u.L(p.ProbeRadius), p.Excluded ? 1 : 0,
+                        u.L(c.X), u.L(c.Y), u.L(c.Z)));
                 }
             }
             File.WriteAllText(path, sb.ToString());
         }
 
-        /// <summary>Plain XYZ point cloud (space separated) in the chosen units.</summary>
+        /// <summary>Plain XYZ point cloud (space separated, probe-compensated contact points) in the chosen units.</summary>
         public static void WriteXyz(Project proj, string path, bool partFrame, UnitFmt u, IEnumerable<Feature> features = null)
         {
             Mat4 m = partFrame ? proj.AlignmentMatrix : Mat4.Identity();
             var sb = new StringBuilder();
             foreach (var f in features ?? proj.Features)
-                foreach (var p in f.ActivePoints)
+                foreach (var c in FeatureSolver.ContactPoints(f, f.ActivePoints.ToList()))
                 {
-                    Vec3 q = m.TransformPoint(p.Position);
+                    Vec3 q = m.TransformPoint(c);
                     sb.AppendLine(u.L(q.X) + " " + u.L(q.Y) + " " + u.L(q.Z));
                 }
             File.WriteAllText(path, sb.ToString());
         }
 
-        /// <summary>Human-readable inspection report (features and dimensions).</summary>
-        public static string Report(Project proj, bool partFrame, UnitFmt u)
+        /// <summary>Human-readable inspection report (features and dimensions). <paramref name="capability"/>: arm-check summary line.</summary>
+        public static string Report(Project proj, bool partFrame, UnitFmt u, string capability = null)
         {
             Mat4 m = partFrame ? proj.AlignmentMatrix : Mat4.Identity();
             var sb = new StringBuilder();
@@ -223,6 +229,7 @@ namespace MicroScribe.Export
             sb.AppendLine("Date: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm"));
             sb.AppendLine("Coordinate system: " + (partFrame ? proj.AlignmentDescription : "Machine"));
             sb.AppendLine("Units: " + (u.Inch ? "inch" : "mm") + ", degrees");
+            if (!string.IsNullOrEmpty(capability)) sb.AppendLine(capability);
             sb.AppendLine(new string('-', 78));
             foreach (var f in proj.Features)
             {

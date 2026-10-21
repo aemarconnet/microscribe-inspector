@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Xml.Serialization;
@@ -143,16 +143,23 @@ namespace MicroScribe.Model
             }
             if (f.Kind == FeatureKind.Curve)
             {
-                try { f.RawFit = f.Geometry = CurvePrim.Build(pts.Select(q => q.Position).ToList(), f.CurveMode, f.CurveTolerance, f.Closed); }
+                // the curve goes through the contact points, not the ball centres
+                try { f.RawFit = f.Geometry = CurvePrim.Build(CompensateCurve(pts, f.Compensation, f.Closed), f.CurveMode, f.CurveTolerance, f.Closed); }
                 catch (Exception ex) { f.RawFit = f.Geometry = null; f.FitError = ex.Message; }
                 return;
             }
             if (f.Kind == FeatureKind.Surface)
             {
-                var sections = pts.GroupBy(q => q.Section).OrderBy(g => g.Key).Select(g => g.Select(q => q.Position).ToList()).ToList();
+                var groups = pts.GroupBy(q => q.Section).OrderBy(g => g.Key).Select(g => g.ToList()).ToList();
                 string err;
-                f.RawFit = f.Geometry = Loft.Build(sections, f.SurfaceCtrlU, out err);
+                var raw = Loft.Build(groups.Select(g => g.Select(q => q.Position).ToList()).ToList(), f.SurfaceCtrlU, out err);
+                f.RawFit = f.Geometry = raw;
                 f.FitError = err;
+                if (raw == null || f.Compensation == CompensationSide.None || pts.All(q => q.ProbeRadius <= 0)) return;
+                // second pass: move every ball centre onto the part along the normal of the first surface
+                var contact = groups.Select(g => g.Select(q => SurfaceContact(raw, q)).ToList()).ToList();
+                var comp = Loft.Build(contact, f.SurfaceCtrlU, out err);
+                if (comp != null) f.Geometry = comp; else f.FitError = err;
                 return;
             }
             Vec3[] p = pts.Select(q => q.Position).ToArray();
@@ -184,11 +191,23 @@ namespace MicroScribe.Model
         /// </summary>
         public static Primitive Compensate(Primitive raw, Feature f, List<MeasuredPoint> pts, double r)
         {
-            if (r <= 0 || f.Compensation == CompensationSide.None || raw is PointPrim || raw is LinePrim) return raw;
+            if (r <= 0 || f.Compensation == CompensationSide.None) return raw;
             Vec3 avgDir = Vec3.Zero;
             foreach (var q in pts) avgDir += q.Direction;
             Primitive g = raw.Clone();
-            if (g is PlanePrim)
+            if (g is PointPrim)
+            {
+                // no surface known: the ball touched in the direction the stylus points
+                if (avgDir.Length > 1e-9) ((PointPrim)g).Position += avgDir.Normalized() * r;
+            }
+            else if (g is LinePrim)
+            {
+                // edge or wall line: offset perpendicular to the line, toward where the stylus points
+                var l = (LinePrim)g;
+                Vec3 off = avgDir - l.Direction * avgDir.Dot(l.Direction);
+                if (off.Length > 1e-3 * Math.Max(avgDir.Length, 1e-9)) l.Origin += off.Normalized() * r;
+            }
+            else if (g is PlanePrim)
             {
                 var pl = (PlanePrim)g;
                 // Normal is oriented toward the probe; material is on the -normal side.
@@ -211,6 +230,114 @@ namespace MicroScribe.Model
             }
             g.Stats = raw.Stats;
             return g;
+        }
+
+        /// <summary>
+        /// Contact points of a traced curve. Auto: perpendicular to the curve, toward where the stylus
+        /// points (tracing over a surface). Outside / Inside: within the curve's best-fit plane, toward /
+        /// away from the area the curve encloses (tracing around a boss / inside a pocket with the ball
+        /// against the wall). Falls back to Auto when the curve does not span a plane.
+        /// </summary>
+        public static List<Vec3> CompensateCurve(IList<MeasuredPoint> pts, CompensationSide side, bool closed = false)
+        {
+            var p = pts.Select(q => q.Position).ToList();
+            int n = p.Count;
+            if (side == CompensationSide.None || pts.All(q => q.ProbeRadius <= 0)) return p;
+            Vec3 pn = Vec3.Zero;
+            double area = 0;
+            bool inPlane = false;
+            if (side != CompensationSide.Auto && n >= 3)
+            {
+                var pl = Fitter.FitPlane(p.ToArray());
+                if (pl != null)
+                {
+                    pn = pl.Normal;
+                    Vec3 a = pn.AnyPerpendicular(), b = pn.Cross(a);
+                    double len = 0;
+                    for (int i = 0; i < n; i++)
+                    {
+                        Vec3 u = p[i] - pl.Origin, w = p[(i + 1) % n] - pl.Origin;   // shoelace, closed by the chord
+                        area += 0.5 * (u.Dot(a) * w.Dot(b) - w.Dot(a) * u.Dot(b));
+                        if (i + 1 < n) len += (p[i + 1] - p[i]).Length;
+                    }
+                    inPlane = Math.Abs(area) > 1e-3 * len * len;
+                }
+            }
+            var res = new List<Vec3>(n);
+            for (int i = 0; i < n; i++)
+            {
+                double r = pts[i].ProbeRadius;
+                if (r <= 0) { res.Add(p[i]); continue; }
+                Vec3 t = closed ? p[(i + 1) % n] - p[(i + n - 1) % n] : p[Math.Min(n - 1, i + 1)] - p[Math.Max(0, i - 1)];
+                t = t.Length > 1e-9 ? t.Normalized() : Vec3.Zero;
+                Vec3 d = pts[i].Direction, off;
+                if (inPlane)
+                {
+                    Vec3 inward = pn.Cross(t) * (area > 0 ? 1 : -1);   // left of the travel direction for a CCW loop
+                    off = side == CompensationSide.Outside ? inward : -inward;
+                }
+                else
+                {
+                    off = d - t * d.Dot(t);
+                    if (off.Length < 0.2) off = d;   // stylus almost along the curve: best guess
+                }
+                res.Add(off.Length > 1e-9 ? p[i] + off.Normalized() * r : p[i]);
+            }
+            return res;
+        }
+
+        /// <summary>Contact point of one ball-centre sample on a freeform surface (normal toward the stylus side).</summary>
+        static Vec3 SurfaceContact(SurfacePrim raw, MeasuredPoint q)
+        {
+            if (q.ProbeRadius <= 0) return q.Position;
+            double u, v; Vec3 c;
+            raw.Closest(q.Position, out u, out v, out c);
+            Vec3 nrm = raw.Normal(u, v);
+            if (nrm.Dot(q.Direction) < 0) nrm = -nrm;
+            return q.Position + nrm * q.ProbeRadius;
+        }
+
+        /// <summary>
+        /// Where the probe ball touched the part for each point (ball centre moved by its radius toward
+        /// the material, consistent with the feature's compensation). Used for exports and point dimensions.
+        /// </summary>
+        public static List<Vec3> ContactPoints(Feature f, IList<MeasuredPoint> pts)
+        {
+            if (f.Origin == FeatureOrigin.Constructed || f.Compensation == CompensationSide.None || pts.All(q => q.ProbeRadius <= 0))
+                return pts.Select(q => q.Position).ToList();
+            if (f.Kind == FeatureKind.Curve) return CompensateCurve(pts, f.Compensation, f.Closed);
+            var surf = f.RawFit as SurfacePrim;
+            if (surf != null) return pts.Select(q => SurfaceContact(surf, q)).ToList();
+            return pts.Select(q => ContactPoint(f, q)).ToList();
+        }
+
+        /// <summary>Contact point of a single point of a feature (see <see cref="ContactPoints"/>).</summary>
+        public static Vec3 ContactPoint(Feature f, MeasuredPoint q)
+        {
+            double r = q.ProbeRadius;
+            if (r <= 0 || f.Compensation == CompensationSide.None) return q.Position;
+            if (f.Kind == FeatureKind.Curve || f.RawFit is SurfacePrim)
+            {
+                int i = f.Points.IndexOf(q);
+                return i >= 0 ? ContactPoints(f, f.Points)[i] : q.Position;
+            }
+            Primitive raw = f.RawFit, g = f.Geometry;
+            Vec3 p = q.Position, d = q.Direction;
+            if (raw is LinePrim)
+            {
+                var l = (LinePrim)raw;
+                Vec3 off = d - l.Direction * d.Dot(l.Direction);
+                return off.Length > 1e-3 ? p + off.Normalized() * r : p;
+            }
+            if (raw == null || g == null || raw is PointPrim) return p + d.Normalized() * r;
+            // surface normal at the point, oriented from the ball-centre fit toward the compensated surface
+            const double h = 1e-3;
+            Vec3 grad = new Vec3(raw.SignedDistance(p + Vec3.UnitX * h) - raw.SignedDistance(p - Vec3.UnitX * h),
+                                 raw.SignedDistance(p + Vec3.UnitY * h) - raw.SignedDistance(p - Vec3.UnitY * h),
+                                 raw.SignedDistance(p + Vec3.UnitZ * h) - raw.SignedDistance(p - Vec3.UnitZ * h));
+            if (grad.Length < 1e-9) return p + d.Normalized() * r;
+            Vec3 nrm = grad.Normalized();
+            return raw.SignedDistance(p) - g.SignedDistance(p) >= 0 ? p + nrm * r : p - nrm * r;
         }
 
         /// <summary>True when probing a boss/ball from outside (stylus pointing toward the axis/centre).</summary>
@@ -285,7 +412,7 @@ namespace MicroScribe.Model
                         // freeform surface through the traced curves, in the given order
                         var sections = src.Select(s => s.Geometry as CurvePrim).Where(c => c != null)
                             .Select(c => c.Samples.ToList()).ToList();
-                        var raw = src.Select(s => s.ActivePoints.Select(q => q.Position).ToList()).ToList();
+                        var raw = src.Select(s => ContactPoints(s, s.ActivePoints.ToList())).ToList();
                         string err;
                         var surf = Loft.Build(sections, f.SurfaceCtrlU, out err);
                         if (surf == null) { f.FitError = err; f.Geometry = f.RawFit = null; return; }

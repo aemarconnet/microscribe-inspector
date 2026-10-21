@@ -1,0 +1,76 @@
+# Roadmap
+
+© 2026 Marconnet Technologies — licensed under [CC BY 4.0](LICENSE-docs).
+
+What is planned, in the order it will be worked on. The list is shaped by what a manual hard-probe
+arm can do well: positions are captured with the pedals (there is no touch-trigger probe), the
+stylus has a fixed ball or point tip, and accuracy is in the few-tenths-of-a-millimetre class over a
+reach of about 1.27 m. A pass/fail decision is only trustworthy when the tolerance is roughly four
+times the arm's measuring error, so the focus is on dependable basics rather than fine GD&T.
+
+Effort: **S** small · **M** medium · **L** large.
+
+## Phase 1 — Trustworthy numbers
+
+1. [x] **Ball compensation for curves, freeform surfaces, lines and single points** (S–M) —
+   offset along the surface normal (freeform surfaces), perpendicular to the curve in the stylus
+   direction or in the curve's plane (curves), or along the stylus (points, lines).
+2. [x] **Movement check and hands-free capture** (S) — reject a capture when the stylus moved during
+   the averaging window; optional dwell capture when the stylus is held still.
+3. [x] **Probe qualification on a reference sphere** (S) — measure a ball of known diameter to find a
+   tip's effective radius and its error; kept per tip with the date.
+4. [x] **Arm check** (M) — single-point articulation test in a cone seat and a length test on a known
+   gauge, in the spirit of ASME B89.4.22, with a history and pass/fail against your own limit.
+5. [x] **Measurement capability in reports** (S) — the latest arm-check result is shown with the
+   results; tolerances tighter than 4× of it are flagged once tolerances exist (item 6).
+
+## Phase 2 — Inspection against nominal values
+
+6. [ ] **Nominal values and tolerances** on features and dimensions, pass/fail colours and an
+   out-of-tolerance list (M).
+7. [ ] **Basic GD&T** (M–L) — flatness, straightness, roundness, cylindricity, parallelism,
+   perpendicularity, angularity, position, coaxiality, profile; datum reference frames from the
+   alignment features; optional minimum-zone fit next to least squares.
+8. [ ] **Nominal model import** (L) — STL first: display, best-fit and 3-2-1 alignment to the model,
+   live stylus-to-model deviation, deviation colour map, comparison points. STEP import later.
+9. [ ] **Report with pictures** (M) — HTML/PDF with 3D snapshots, tables, pass/fail, logo and part,
+   serial and operator fields; CSV of results per part.
+10. [ ] **Inspection plans: learn and replay** (L) — record the feature sequence with nominals,
+    prompts and pictures, then guide the operator through the next part step by step; results per
+    part feed simple SPC (trend, Cp/Cpk).
+
+## Phase 3 — Capture and digitizing to CAD
+
+11. [ ] **More hard-probe scan modes** (M) — fixed time, section planes (a point each time the stylus
+    crosses parallel planes at a set spacing) and free point-cloud scanning with filtering.
+12. [ ] **2D sketch from a probed profile** (M) — project onto a plane, split into lines and arcs,
+    export DXF and SolidWorks curve files.
+13. [ ] **More feature types** (M) — round and square slot, rectangle, ellipse, torus (fillets),
+    width / keyway, edge and vector points for sheet metal.
+14. [ ] **More constructions** (S–M) — offset plane, mid-plane, projection onto a plane, plane
+    through a line parallel/perpendicular to a datum, circle or plane through hole centres (bolt
+    circle), mirror.
+15. [ ] **Constrained fits** (M) — fixed diameter or cone angle, forced parallel/perpendicular to a
+    datum.
+16. [ ] **More export formats** (M) — IGES, STL mesh of freeform surfaces, DXF; results as QIF/DMIS.
+
+## Phase 4 — Larger parts and conditions
+
+17. [ ] **Leapfrog** (M) — move the arm using three or more cone seats or spheres, best-fit the
+    transform and report the added error.
+18. [ ] **Temperature correction** (S) — part temperature and material entered by hand, results
+    scaled to 20 °C.
+19. [ ] **Faster sampling** (S) — 115200 baud for denser scans (needs a hardware test).
+
+## Ongoing
+
+- [ ] Confirm STEP import in SolidWorks, Fusion, FreeCAD and Onshape; publish example files
+- [ ] Test reports from other serial MicroScribe models (DH1.0 parameter format, 6-axis stylus)
+- [ ] SpaceMouse: per-axis tuning presets
+- [ ] Localisation (German, French, Spanish…)
+
+## Not planned
+
+Things this kind of arm cannot do well: touch-trigger hit detection, automated (CNC) measuring
+programs, laser-scanner workflows, probe changers and star styli, tight GD&T well under ±1 mm,
+threads, surface roughness and features smaller than the probe ball.
